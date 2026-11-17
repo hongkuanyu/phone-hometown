@@ -68,8 +68,6 @@ export function StoryScene({
   const isCooling = chapter.scene === 'cooling'
   const isRestored = restoredTermIds.includes(term.id)
 
-  termRef.current = term
-
   const mic = useMicRecorder({
     onPermission: onMicPermission,
     onClip: (clip) => {
@@ -81,7 +79,7 @@ export function StoryScene({
   })
 
   useEffect(() => {
-    setPulse((value) => value + 1)
+    termRef.current = term
     if (audioMuted) return
     if (playedRef.current === term.id) return
     playedRef.current = term.id

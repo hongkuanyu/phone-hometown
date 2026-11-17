@@ -36,8 +36,7 @@ interface AboutReturn {
 }
 
 function App() {
-  const audioRef = useRef<NarrativeAudio | null>(null)
-  if (!audioRef.current) audioRef.current = new NarrativeAudio()
+  const [audio] = useState(() => new NarrativeAudio())
 
   const [scene, setScene] = useState<Scene>('intro')
   const [termIndex, setTermIndex] = useState(0)
@@ -63,21 +62,21 @@ function App() {
   }, [])
 
   const startStory = useCallback(async () => {
-    const engine = audioRef.current
-    if (!engine) return
     setAudioMuted(false)
-    engine.setMuted(false)
-    await engine.unlock()
+    audio.setMuted(false)
+    await audio.unlock()
+    setAudioLevel(0)
     setAudioUnlocked(true)
     setScene('call')
     setTermIndex(0)
     setTranslationOpen(false)
-  }, [])
+  }, [audio])
 
   const goHome = useCallback(() => {
-    audioRef.current?.stopVoice()
-    audioRef.current?.stopAmbient()
+    audio.stopVoice()
+    audio.stopAmbient()
     resetFragmentUrls()
+    setAudioLevel(0)
     setScene('intro')
     setTermIndex(0)
     setTranslationOpen(false)
@@ -88,10 +87,10 @@ function App() {
     setAboutReturn(null)
     setAudioUnlocked(false)
     callTimer.reset()
-  }, [callTimer, resetFragmentUrls])
+  }, [audio, callTimer, resetFragmentUrls])
 
   const restart = useCallback(async () => {
-    audioRef.current?.stopVoice()
+    audio.stopVoice()
     resetFragmentUrls()
     setRestoredTermIds([])
     setRecordedFragments([])
@@ -100,16 +99,15 @@ function App() {
     setAboutReturn(null)
     setSubtitleVisible(false)
     callTimer.reset()
-    const engine = audioRef.current
-    if (!engine) return
     setAudioMuted(false)
-    engine.setMuted(false)
-    await engine.unlock()
+    audio.setMuted(false)
+    await audio.unlock()
+    setAudioLevel(0)
     setAudioUnlocked(true)
     setScene('call')
     setTermIndex(0)
     setTranslationOpen(false)
-  }, [callTimer, resetFragmentUrls])
+  }, [audio, callTimer, resetFragmentUrls])
 
   const openAbout = useCallback(() => {
     if (isStoryScene(scene)) {
@@ -117,10 +115,10 @@ function App() {
     } else {
       setAboutReturn(null)
     }
-    audioRef.current?.stopVoice()
+    audio.stopVoice()
     setTranslationOpen(false)
     setScene('about')
-  }, [scene, termIndex])
+  }, [audio, scene, termIndex])
 
   const returnFromAbout = useCallback(() => {
     if (!aboutReturn) return
@@ -132,10 +130,10 @@ function App() {
   const toggleAudio = useCallback(() => {
     setAudioMuted((muted) => {
       const next = !muted
-      audioRef.current?.setMuted(next)
+      audio.setMuted(next)
       return next
     })
-  }, [])
+  }, [audio])
 
   const toggleSubtitles = useCallback(() => {
     setSubtitleVisible((visible) => !visible)
@@ -154,22 +152,22 @@ function App() {
   const playTerm = useCallback(
     (term: StoryTerm, rate = 1) => {
       if (!audioUnlocked) return
-      void audioRef.current?.playTerm(term, rate)
+      void audio.playTerm(term, rate)
     },
-    [audioUnlocked],
+    [audio, audioUnlocked],
   )
 
   const explainTerm = useCallback(
     (term: StoryTerm) => {
       if (!audioUnlocked) return
-      audioRef.current?.playHint(term.mandarinHint)
+      audio.playHint(term.mandarinHint)
     },
-    [audioUnlocked],
+    [audio, audioUnlocked],
   )
 
   const advance = useCallback(() => {
     if (!chapter) return
-    audioRef.current?.stopVoice()
+    audio.stopVoice()
     setTranslationOpen(false)
     if (termIndex < chapter.terms.length - 1) {
       setTermIndex((index) => index + 1)
@@ -177,7 +175,7 @@ function App() {
     }
     setScene(chapter.nextScene)
     setTermIndex(0)
-  }, [chapter, termIndex])
+  }, [audio, chapter, termIndex])
 
   const saveClip = useCallback(
     (term: StoryTerm, clip: VoiceClip) => {
@@ -197,56 +195,50 @@ function App() {
   )
 
   useEffect(() => {
-    const engine = audioRef.current
-    if (!engine || !audioUnlocked) return
+    if (!audioUnlocked) return
 
-    if (scene === 'call') engine.setAmbient('phone', getChapter('call').ambientSrc)
-    else if (scene === 'stove') engine.setAmbient('kitchen', getChapter('stove').ambientSrc)
-    else if (scene === 'transition') engine.setAmbient('night', getChapter('cooling').ambientSrc)
-    else if (scene === 'cooling') engine.setAmbient('night', getChapter('cooling').ambientSrc)
-    else if (scene === 'ending') engine.setAmbient('phone', getChapter('call').ambientSrc)
-    else engine.setAmbient('none')
+    if (scene === 'call') audio.setAmbient('phone', getChapter('call').ambientSrc)
+    else if (scene === 'stove') audio.setAmbient('kitchen', getChapter('stove').ambientSrc)
+    else if (scene === 'transition') audio.setAmbient('night', getChapter('cooling').ambientSrc)
+    else if (scene === 'cooling') audio.setAmbient('night', getChapter('cooling').ambientSrc)
+    else if (scene === 'ending') audio.setAmbient('phone', getChapter('call').ambientSrc)
+    else audio.setAmbient('none')
 
     return () => {
       // The next scene starts its ambience immediately; stop only on unmount/about.
-      if (scene === 'about' || scene === 'intro') engine.stopAmbient()
+      if (scene === 'about' || scene === 'intro') audio.stopAmbient()
     }
-  }, [audioUnlocked, scene])
+  }, [audio, audioUnlocked, scene])
 
   useEffect(() => {
-    if (!audioUnlocked) {
-      setAudioLevel(0)
-      return
-    }
-    const engine = audioRef.current
-    if (!engine) return
+    if (!audioUnlocked) return
     let frame = 0
     let lastUpdate = 0
     const readLevel = (now: number) => {
       if (now - lastUpdate > 45) {
-        setAudioLevel(engine.getLevel())
+        setAudioLevel(audio.getLevel())
         lastUpdate = now
       }
       frame = requestAnimationFrame(readLevel)
     }
     frame = requestAnimationFrame(readLevel)
     return () => cancelAnimationFrame(frame)
-  }, [audioUnlocked])
+  }, [audio, audioUnlocked])
 
   useEffect(() => {
     const handleVisibility = () => {
-      audioRef.current?.pauseForVisibility(document.hidden)
+      audio.pauseForVisibility(document.hidden)
     }
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
-  }, [])
+  }, [audio])
 
   useEffect(() => {
     return () => {
-      void audioRef.current?.close()
+      void audio.close()
       resetFragmentUrls()
     }
-  }, [resetFragmentUrls])
+  }, [audio, resetFragmentUrls])
 
   const advanceToCooling = useCallback(() => {
     setScene('cooling')
@@ -254,14 +246,14 @@ function App() {
   }, [])
 
   const openArchiveFromEnding = useCallback(() => {
-    audioRef.current?.stopVoice()
+    audio.stopVoice()
     setAboutReturn(null)
     setScene('about')
-  }, [])
+  }, [audio])
 
   const sharedPhoneProps = {
     timer: callTimer.label,
-    audioLevel,
+    audioLevel: audioUnlocked ? audioLevel : 0,
     audioMuted,
     subtitleVisible,
     reducedMotion,

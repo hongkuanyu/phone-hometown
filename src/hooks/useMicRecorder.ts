@@ -46,8 +46,10 @@ export function useMicRecorder({
   const onPermissionRef = useRef(onPermission)
   const onClipRef = useRef(onClip)
 
-  onPermissionRef.current = onPermission
-  onClipRef.current = onClip
+  useEffect(() => {
+    onPermissionRef.current = onPermission
+    onClipRef.current = onClip
+  }, [onClip, onPermission])
 
   const updatePermission = useCallback((next: MicPermission) => {
     permissionRef.current = next

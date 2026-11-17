@@ -128,9 +128,11 @@ export function SoundTextCanvas({
     reducedMotion,
     restored,
   })
-  const pulseRef = useRef(performance.now())
+  const pulseRef = useRef(0)
 
-  propsRef.current = { text, audioLevel, restoration, reducedMotion, restored }
+  useEffect(() => {
+    propsRef.current = { text, audioLevel, restoration, reducedMotion, restored }
+  }, [text, audioLevel, restoration, reducedMotion, restored])
 
   useEffect(() => {
     pulseRef.current = performance.now()
