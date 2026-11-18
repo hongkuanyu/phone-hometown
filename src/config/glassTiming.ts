@@ -1,74 +1,84 @@
 export interface GlassTimingProfile {
-  /** Time the word stays readable before the first crack appears. */
-  intactHold: number
-  /** Time for crack layers to travel across the glyph. */
+  /** Complete reading window before the fracture timeline starts. */
+  readingHold: number
+  /** 0—80ms: impact point, stress, first crack. */
+  impactDuration: number
+  /** Next 120ms: main and secondary cracks expand. */
   crackDuration: number
-  /** Fast separation of the glass pieces. */
+  /** Fracture, separation and the main outward motion. */
   burstDuration: number
-  /** First impact, rotation and suspension settle. */
+  /** Deceleration into the suspended state. */
   settleDuration: number
-  /** Multiplier used by fragment travel; keeps chapter character distinct. */
+  /** Chapter-level distance multiplier; not a timing value. */
   motionScale: number
 }
 
 /**
  * One source of truth for the glass-fracture timeline.
- * All values are milliseconds.
+ * All values are milliseconds. The sum of the four break phases is the
+ * duration from the first crack to the stable suspended result.
  */
 export const GLASS_TIMING = {
   call: {
-    intactHold: 100,
-    crackDuration: 120,
-    burstDuration: 220,
-    settleDuration: 210,
-    motionScale: 0.62,
+    readingHold: 360,
+    impactDuration: 70,
+    crackDuration: 110,
+    burstDuration: 400,
+    settleDuration: 220,
+    motionScale: 0.76,
   },
   stove: {
-    intactHold: 110,
-    crackDuration: 150,
-    burstDuration: 240,
-    settleDuration: 260,
-    motionScale: 0.8,
+    readingHold: 400,
+    impactDuration: 80,
+    crackDuration: 120,
+    burstDuration: 420,
+    settleDuration: 180,
+    motionScale: 0.84,
   },
   cooling: {
-    intactHold: 90,
-    crackDuration: 110,
-    burstDuration: 200,
-    settleDuration: 180,
-    motionScale: 1.16,
+    readingHold: 320,
+    impactDuration: 60,
+    crackDuration: 100,
+    burstDuration: 380,
+    settleDuration: 140,
+    motionScale: 1.1,
   },
   transition: {
-    intactHold: 100,
-    crackDuration: 120,
-    burstDuration: 220,
-    settleDuration: 210,
+    readingHold: 300,
+    impactDuration: 70,
+    crackDuration: 110,
+    burstDuration: 360,
+    settleDuration: 160,
     motionScale: 0.9,
   },
   ending: {
-    intactHold: 160,
-    crackDuration: 220,
-    burstDuration: 350,
-    settleDuration: 320,
-    motionScale: 1,
+    readingHold: 420,
+    impactDuration: 100,
+    crackDuration: 180,
+    burstDuration: 470,
+    settleDuration: 350,
+    motionScale: 0.96,
   },
   reduced: {
-    intactHold: 100,
-    crackDuration: 90,
-    burstDuration: 100,
+    readingHold: 250,
+    impactDuration: 60,
+    crackDuration: 80,
+    burstDuration: 180,
     settleDuration: 130,
-    motionScale: 0.32,
+    motionScale: 0.22,
   },
   onset: {
     attackSeconds: 0.05,
     releaseSeconds: 0.11,
     windowMs: 70,
     debounceMs: 210,
-    boostDurationMs: 260,
     minimumThreshold: 0.008,
     baselineMultiplier: 1.2,
+    boostDurationMs: 260,
   },
   replay: {
-    aggregateMs: 0,
+    recombineMs: 90,
+    replayHoldMs: 80,
   },
 } as const
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { GLASS_TIMING } from '../config/glassTiming'
 import type { StoryScene } from '../types'
 
@@ -50,6 +50,7 @@ interface GlassFragment {
   rotation: number
   phase: number
   restoreRank: number
+  startDelay: number
   opacity: number
   scale: number
   drift: number
@@ -67,6 +68,7 @@ interface GlassGeometry {
   dpr: number
   chars: CharCell[]
   fragments: GlassFragment[]
+  seedCount: number
   glyphSurface: HTMLCanvasElement
   crackLayers: HTMLCanvasElement[]
   impacts: Point[]
@@ -222,13 +224,22 @@ function polygonCentroid(polygon: Point[]): Point {
   }
 }
 
-function clipPolygonToBisector(polygon: Point[], seed: Point, other: Point) {
+function clipPolygonToBisector(
+  polygon: Point[],
+  seed: Point,
+  other: Point,
+  seedWeight: number,
+  otherWeight: number,
+) {
   const dx = other.x - seed.x
   const dy = other.y - seed.y
   const midpointX = (seed.x + other.x) / 2
   const midpointY = (seed.y + other.y) / 2
+  const weightOffset = (seedWeight - otherWeight) / 2
   const side = (point: Point) =>
-    (point.x - midpointX) * dx + (point.y - midpointY) * dy
+    (point.x - midpointX) * dx +
+    (point.y - midpointY) * dy -
+    weightOffset
 
   const output: Point[] = []
   for (let index = 0; index < polygon.length; index += 1) {
@@ -341,6 +352,20 @@ function makeFragmentSprite(
   context.globalCompositeOperation = 'source-over'
   return surface
 }
+function spriteHasGlyph(surface: HTMLCanvasElement) {
+  const context = surface.getContext('2d', { willReadFrequently: true })
+  if (!context) return false
+  const pixels = context.getImageData(0, 0, surface.width, surface.height).data
+  let visibleSamples = 0
+  for (let index = 3; index < pixels.length; index += 4) {
+    if (pixels[index] > 7) {
+      visibleSamples += 1
+      if (visibleSamples >= 1) return true
+    }
+  }
+  return false
+}
+
 function makeCrackLayers(
   glyphSurface: HTMLCanvasElement,
   width: number,
@@ -393,31 +418,6 @@ function makeCrackLayers(
     layers[layer].push(edge)
   }
 
-  const radialCracks: Array<{ points: Point[]; layerIndex: number }> = []
-  const branchCountPerImpact = width < 660 ? 5 : 8
-  for (const impact of impacts) {
-    for (let branch = 0; branch < branchCountPerImpact; branch += 1) {
-      const points: Point[] = [{ x: impact.x, y: impact.y }]
-      let angle = rng() * Math.PI * 2
-      let x = impact.x + Math.cos(angle) * 2.5
-      let y = impact.y + Math.sin(angle) * 2.5
-      const branchLength =
-        18 + rng() * Math.min(width, height) * (0.18 + rng() * 0.14)
-      const steps = 4 + Math.floor(rng() * 3)
-      for (let step = 0; step < steps; step += 1) {
-        angle += (rng() * 2 - 1) * 0.42
-        const stepLength = (branchLength / steps) * (0.72 + rng() * 0.56)
-        x += Math.cos(angle) * stepLength
-        y += Math.sin(angle) * stepLength
-        points.push({ x, y })
-      }
-      radialCracks.push({
-        points,
-        layerIndex: branch < 2 ? 0 : branch < 4 ? 1 : 2,
-      })
-    }
-  }
-
   return layers.map((layer, layerIndex) => {
     const surface = createSurface(width, height, dpr)
     const context = surface.getContext('2d')
@@ -453,44 +453,6 @@ function makeCrackLayers(
       context.lineWidth = 0.8 + rng() * 0.55
       context.stroke()
 
-      if (rng() > 0.72) {
-        const ratio = 0.45 + rng() * 0.2
-        const branchStart = {
-          x: edge.start.x + dx * ratio,
-          y: edge.start.y + dy * ratio,
-        }
-        const angle =
-          Math.atan2(dy, dx) + (rng() > 0.5 ? 1 : -1) * (0.5 + rng() * 0.5)
-        const branchLength = 4 + rng() * 10
-        context.beginPath()
-        context.moveTo(branchStart.x, branchStart.y)
-        context.lineTo(
-          branchStart.x + Math.cos(angle) * branchLength * 0.55,
-          branchStart.y + Math.sin(angle) * branchLength * 0.55,
-        )
-        context.lineTo(
-          branchStart.x + Math.cos(angle + 0.2) * branchLength,
-          branchStart.y + Math.sin(angle + 0.2) * branchLength,
-        )
-        context.strokeStyle = 'rgba(234, 226, 211, 0.56)'
-        context.lineWidth = 0.58
-        context.stroke()
-      }
-    }
-
-    for (const crack of radialCracks) {
-      if (crack.layerIndex !== layerIndex) continue
-      context.beginPath()
-      context.moveTo(crack.points[0].x, crack.points[0].y)
-      for (let index = 1; index < crack.points.length; index += 1) {
-        context.lineTo(crack.points[index].x, crack.points[index].y)
-      }
-      context.strokeStyle =
-        rng() > 0.76
-          ? 'rgba(190, 102, 81, 0.74)'
-          : 'rgba(250, 245, 232, 0.86)'
-      context.lineWidth = 0.82 + rng() * 0.52
-      context.stroke()
     }
 
     context.setTransform(1, 0, 0, 1, 0, 0)
@@ -511,36 +473,89 @@ function buildGeometry(
   const dpr = Math.min(window.devicePixelRatio || 1, 1.8)
   const chars = makeCharLayout(width, height, text)
   if (chars.length === 0) return null
-
   const textBounds = getTextBounds(chars, width, height)
   const glyphSurface = drawGlyphSurface(width, height, dpr, chars)
-  const seed = hashString(`${text}|${chapter}|glass-v2`)
+  const seed = hashString(`${text}|${chapter}|glass-v3`)
   const rng = mulberry32(seed)
-  const chapterFactor =
-    chapter === 'call'
-      ? 0.8
-      : chapter === 'stove'
-        ? 1
-        : chapter === 'cooling'
-          ? 1.18
-          : 1.05
-  const targetBase = (width < 660 ? 3 : 5.1) * chars.length * chapterFactor
-  const targetMax = width < 660 ? 24 : 48
-  const targetMin = width < 660 ? 12 : 24
-  const targetCount = clamp(
-    Math.round(targetBase * (reducedMotion ? 0.62 : 1)),
-    Math.round(targetMin * (reducedMotion ? 0.67 : 1)),
-    Math.round(targetMax * (reducedMotion ? 0.7 : 1)),
+  const isMobile = width < 660
+  const averageCharSize = chars.reduce((sum, char) => sum + char.size, 0) / chars.length
+  const perCharTarget = chapter === 'call' ? 28 : chapter === 'stove' ? 32 : chapter === 'cooling' ? 36 : 34
+  const mobilePerCharTarget = chapter === 'call' ? 16 : chapter === 'stove' ? 18 : chapter === 'cooling' ? 20 : 18
+  const desktopBudget = chapter === 'cooling' ? 200 : 180
+  const mobileBudget = chapter === 'cooling' ? 108 : 96
+  const baseTarget = isMobile ? chars.length * mobilePerCharTarget : chars.length * perCharTarget
+  const budget = reducedMotion ? (isMobile ? 54 : 96) : isMobile ? mobileBudget : desktopBudget
+  const effectiveTarget = baseTarget * (reducedMotion ? 0.58 : 1)
+  const seedCount = clamp(
+    Math.round(effectiveTarget),
+    reducedMotion ? (isMobile ? 24 : 48) : isMobile ? 36 : 96,
+    budget,
   )
+  const glyphReadContext = glyphSurface.getContext('2d', {
+    willReadFrequently: true,
+  })
+  const glyphPixels = glyphReadContext?.getImageData(
+    0,
+    0,
+    glyphSurface.width,
+    glyphSurface.height,
+  ).data
+  const glyphPointsByChar = chars.map((char) => {
+    const points: Point[] = []
+    if (!glyphPixels) return points
+    const left = Math.max(0, Math.floor((char.x - char.size * 0.62) * dpr))
+    const right = Math.min(
+      glyphSurface.width,
+      Math.ceil((char.x + char.size * 0.62) * dpr),
+    )
+    const top = Math.max(0, Math.floor((char.y - char.size * 0.78) * dpr))
+    const bottom = Math.min(
+      glyphSurface.height,
+      Math.ceil((char.y + char.size * 0.78) * dpr),
+    )
+    for (let pixelY = top; pixelY < bottom; pixelY += 2) {
+      for (let pixelX = left; pixelX < right; pixelX += 2) {
+        const alpha =
+          glyphPixels[(pixelY * glyphSurface.width + pixelX) * 4 + 3]
+        if (alpha > 7) {
+          points.push({ x: pixelX / dpr, y: pixelY / dpr })
+        }
+      }
+    }
+    return points
+  })
 
-  const seeds: Point[] = []
-  for (let index = 0; index < targetCount; index += 1) {
-    const char = chars[index % chars.length]
-    const spread = index % 7 === 0 ? 0.92 : 0.58
-    seeds.push({
-      x: char.x + (rng() * 2 - 1) * char.size * spread,
-      y: char.y + (rng() * 2 - 1) * char.size * spread,
-    })
+  const seeds: Array<{ point: Point; weight: number }> = []
+  const perCharQuota = Math.max(1, Math.ceil(seedCount / chars.length))
+  for (let charIndex = 0; charIndex < chars.length; charIndex += 1) {
+    const char = chars[charIndex]
+    const candidates = glyphPointsByChar[charIndex]
+    if (candidates.length === 0) continue
+    const remaining = seedCount - seeds.length
+    if (remaining <= 0) break
+    const quota = Math.min(
+      remaining,
+      charIndex === chars.length - 1 ? remaining : perCharQuota,
+    )
+    const charSeeds: Point[] = []
+    for (let index = 0; index < quota; index += 1) {
+      let point = candidates[Math.floor(rng() * candidates.length)]
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        const candidate = candidates[Math.floor(rng() * candidates.length)]
+        if (
+          charSeeds.every(
+            (existing) => Math.hypot(existing.x - candidate.x, existing.y - candidate.y) > 1.35,
+          )
+        ) {
+          point = candidate
+          break
+        }
+      }
+      charSeeds.push(point)
+      const weight =
+        (rng() - 0.5) * char.size * char.size * (isMobile ? 0.0008 : 0.0012)
+      seeds.push({ point, weight })
+    }
   }
 
   const baseRectangle: Point[] = [
@@ -549,18 +564,25 @@ function buildGeometry(
     { x: textBounds.right, y: textBounds.bottom },
     { x: textBounds.left, y: textBounds.bottom },
   ]
-
+  const impacts: Point[] = []
+  const impactCount = rng() > 0.7 ? 2 : 1
+  for (let index = 0; index < impactCount; index += 1) {
+    const char = chars[Math.floor(rng() * chars.length)]
+    impacts.push({
+      x: char.x + (rng() * 2 - 1) * char.size * 0.32,
+      y: char.y + (rng() * 2 - 1) * char.size * 0.35,
+    })
+  }
   const fragments: GlassFragment[] = []
   for (let index = 0; index < seeds.length; index += 1) {
-    const seedPoint = seeds[index]
+    const seedPoint = seeds[index].point
     let polygon = baseRectangle
     for (let otherIndex = 0; otherIndex < seeds.length; otherIndex += 1) {
       if (otherIndex === index) continue
-      polygon = clipPolygonToBisector(polygon, seedPoint, seeds[otherIndex])
+      polygon = clipPolygonToBisector(polygon, seedPoint, seeds[otherIndex].point, seeds[index].weight, seeds[otherIndex].weight)
       if (polygon.length < 3) break
     }
-    if (polygon.length < 3 || polygonArea(polygon) < 2.2) continue
-
+    if (polygon.length < 3 || polygonArea(polygon) < 0.8) continue
     const centroid = polygonCentroid(polygon)
     let left = Infinity
     let top = Infinity
@@ -578,46 +600,42 @@ function buildGeometry(
       width: Math.ceil(right - left + 4),
       height: Math.ceil(bottom - top + 4),
     }
-
+    const baseSprite = makeFragmentSprite(glyphSurface, bounds, polygon, dpr, false)
+    if (!spriteHasGlyph(baseSprite)) continue
+    const restoredSprite = makeFragmentSprite(glyphSurface, bounds, polygon, dpr, true)
     const depth = rng() * 2 - 1
-    const kind = rng()
-    let motionX = 0
-    let motionY = 0
-    if (kind > 0.28) {
-      if (kind > 0.82) {
-        motionX = (rng() * 2 - 1) * 14
-        motionY = 10 + rng() * 30
-      } else {
-        const angle = rng() * Math.PI * 2
-        const distance = 4 + rng() * 19
-        motionX = Math.cos(angle) * distance
-        motionY = Math.sin(angle) * distance
+    const roll = rng()
+    const distanceFactor = roll < 0.15 ? 0.05 + rng() * 0.1 : roll < 0.7 ? 0.25 + rng() * 0.35 : 0.65 + rng() * 0.45
+    const referenceSize = averageCharSize * (isMobile ? 0.82 : 1)
+    const distance = referenceSize * distanceFactor
+    let nearestImpact = impacts[0]
+    let nearestDistance = Infinity
+    for (const impact of impacts) {
+      const candidate = Math.hypot(centroid.x - impact.x, centroid.y - impact.y)
+      if (candidate < nearestDistance) {
+        nearestDistance = candidate
+        nearestImpact = impact
       }
-    } else {
-      motionX = (rng() * 2 - 1) * 3
-      motionY = (rng() * 2 - 1) * 2.5
     }
-
-    if (chapter === 'stove') motionY += 4 + rng() * 7
-    if (chapter === 'cooling') {
-      motionX *= 1.12
-      motionY *= 1.12
-    }
-
-    const baseSprite = makeFragmentSprite(
-      glyphSurface,
-      bounds,
-      polygon,
-      dpr,
-      false,
-    )
-    const restoredSprite = makeFragmentSprite(
-      glyphSurface,
-      bounds,
-      polygon,
-      dpr,
-      true,
-    )
+    const baseAngle = nearestDistance > 1 ? Math.atan2(centroid.y - nearestImpact.y, centroid.x - nearestImpact.x) : rng() * Math.PI * 2
+    const angle = baseAngle + (rng() * 2 - 1) * 0.52
+    const tangentSign = rng() > 0.5 ? 1 : -1
+    let motionX = Math.cos(angle) * distance + Math.cos(baseAngle + Math.PI / 2) * distance * tangentSign * (0.08 + rng() * 0.15)
+    let motionY = Math.sin(angle) * distance + Math.sin(baseAngle + Math.PI / 2) * distance * tangentSign * (0.08 + rng() * 0.15) + referenceSize * (0.025 + rng() * 0.07)
+    if (chapter === 'stove') motionY += referenceSize * (0.03 + rng() * 0.05)
+    let safeScale = 1
+    const padding = 10
+    const minDx = padding - bounds.left
+    const maxDx = width - padding - (bounds.left + bounds.width)
+    const minDy = padding - bounds.top
+    const maxDy = height - padding - (bounds.top + bounds.height)
+    if (motionX > 0) safeScale = Math.min(safeScale, Math.max(0, maxDx / motionX))
+    if (motionX < 0) safeScale = Math.min(safeScale, Math.max(0, minDx / motionX))
+    if (motionY > 0) safeScale = Math.min(safeScale, Math.max(0, maxDy / motionY))
+    if (motionY < 0) safeScale = Math.min(safeScale, Math.max(0, minDy / motionY))
+    safeScale = clamp(safeScale, 0.18, 1)
+    motionX *= safeScale
+    motionY *= safeScale
     fragments.push({
       polygon,
       centroid,
@@ -625,12 +643,13 @@ function buildGeometry(
       depth,
       motionX,
       motionY,
-      rotation: (rng() * 2 - 1) * (width < 660 ? 0.11 : 0.17),
+      rotation: (rng() * 2 - 1) * (isMobile ? 0.08 : 0.14),
       phase: rng() * Math.PI * 2,
       restoreRank: rng(),
-      opacity: 0.64 + rng() * 0.28,
-      scale: 1 + depth * 0.025,
-      drift: 0.35 + rng() * 1.05,
+      startDelay: 20 + rng() * 50,
+      opacity: 0.7 + rng() * 0.24,
+      scale: 1 + depth * 0.022,
+      drift: 0.25 + rng() * 0.8,
       drawX: bounds.left - centroid.x,
       drawY: bounds.top - centroid.y,
       width: bounds.width,
@@ -639,36 +658,16 @@ function buildGeometry(
       restoredSprite,
     })
   }
-
   if (fragments.length === 0) return null
   fragments.sort((a, b) => a.depth - b.depth)
-
-  const impacts: Point[] = []
-  const impactCount = rng() > 0.72 ? 2 : 1
-  for (let index = 0; index < impactCount; index += 1) {
-    const char = chars[Math.floor(rng() * chars.length)]
-    impacts.push({
-      x: char.x + (rng() * 2 - 1) * char.size * 0.35,
-      y: char.y + (rng() * 2 - 1) * char.size * 0.4,
-    })
-  }
-
-  const crackLayers = makeCrackLayers(
-    glyphSurface,
-    width,
-    height,
-    dpr,
-    fragments,
-    impacts,
-    seed,
-  )
-
+  const crackLayers = makeCrackLayers(glyphSurface, width, height, dpr, fragments, impacts, seed)
   return {
     width,
     height,
     dpr,
     chars,
     fragments,
+    seedCount,
     glyphSurface,
     crackLayers,
     impacts,
@@ -689,6 +688,17 @@ export function SoundTextCanvas({
   labelPrefix = '声音文字场',
 }: SoundTextCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [debugFreeze, setDebugFreeze] = useState(false)
+  const [debugTime, setDebugTime] = useState(0)
+  const debugFreezeRef = useRef(false)
+  const debugTimeRef = useRef<number | null>(null)
+  const debugElapsedRef = useRef(0)
+  const debugTiming = reducedMotion ? GLASS_TIMING.reduced : GLASS_TIMING[chapter]
+  const debugBreakDuration =
+    debugTiming.impactDuration +
+    debugTiming.crackDuration +
+    debugTiming.burstDuration +
+    debugTiming.settleDuration
   const propsRef = useRef({
     text,
     audioLevel,
@@ -706,6 +716,18 @@ export function SoundTextCanvas({
   const lastOnsetAtRef = useRef(0)
   const onsetBoostRef = useRef(0)
   const onsetSamplesRef = useRef<Array<{ at: number; level: number }>>([])
+  const readingHoldRef = useRef<number>(
+    (reducedMotion ? GLASS_TIMING.reduced : GLASS_TIMING[chapter]).readingHold,
+  )
+  const lastPostHoldRef = useRef(0)
+  const recombineRef = useRef<{ start: number; fromPostHold: number } | null>(null)
+  const stateKeyRef = useRef<string | null>(null)
+  const replayTokenRef = useRef(replayToken)
+
+  useEffect(() => {
+    debugFreezeRef.current = debugFreeze
+    debugTimeRef.current = debugFreeze ? debugTime : null
+  }, [debugFreeze, debugTime])
 
   useEffect(() => {
     propsRef.current = {
@@ -732,23 +754,52 @@ export function SoundTextCanvas({
   ])
 
   useEffect(() => {
+    if (stateKeyRef.current === stateKey) return
+    stateKeyRef.current = stateKey
     const now = performance.now()
+    const timing = reducedMotion ? GLASS_TIMING.reduced : GLASS_TIMING[chapter]
     pulseRef.current = now
+    readingHoldRef.current = timing.readingHold
     fractureStartRef.current =
       propsRef.current.fractureMode === 'voice' && propsRef.current.speaking
-        ? now + GLASS_TIMING.replay.aggregateMs
+        ? now
         : 0
     baselineLevelRef.current = 0
     lastOnsetAtRef.current = 0
     onsetBoostRef.current = 0
     onsetSamplesRef.current = []
-  }, [stateKey, replayToken])
+    lastPostHoldRef.current = 0
+    recombineRef.current = null
+  }, [chapter, reducedMotion, stateKey])
+
+  useEffect(() => {
+    if (replayTokenRef.current === replayToken) return
+    replayTokenRef.current = replayToken
+    const now = performance.now()
+    pulseRef.current = now
+    readingHoldRef.current = GLASS_TIMING.replay.replayHoldMs
+    fractureStartRef.current = 0
+    baselineLevelRef.current = 0
+    lastOnsetAtRef.current = 0
+    onsetBoostRef.current = 0
+    onsetSamplesRef.current = []
+    recombineRef.current =
+      lastPostHoldRef.current > 1
+        ? { start: now, fromPostHold: lastPostHoldRef.current }
+        : null
+    if (!recombineRef.current) {
+      fractureStartRef.current =
+        propsRef.current.fractureMode === 'voice' && propsRef.current.speaking
+          ? now
+          : 0
+    }
+  }, [replayToken])
 
   useEffect(() => {
     if (speaking && propsRef.current.fractureMode === 'voice') {
       const now = performance.now()
-      if (fractureStartRef.current === 0) {
-        fractureStartRef.current = now + GLASS_TIMING.replay.aggregateMs
+      if (!recombineRef.current && fractureStartRef.current === 0) {
+        fractureStartRef.current = now
       }
       lastOnsetAtRef.current = now
       onsetBoostRef.current = now + GLASS_TIMING.onset.boostDurationMs
@@ -789,7 +840,7 @@ export function SoundTextCanvas({
       context.clearRect(0, 0, width, height)
 
       const now = performance.now()
-      const time = now / 1000
+      const time = debugFreezeRef.current ? 0 : now / 1000
       const level = clamp(current.audioLevel, 0, 1)
       const voice = clamp(level * 1.6, 0, 1)
       const timing = current.reducedMotion
@@ -840,28 +891,76 @@ export function SoundTextCanvas({
         1,
       )
 
+      let recombineActive = false
+      let recombinePostHold: number | null = null
+      const recombine = recombineRef.current
+      if (recombine) {
+        const progress = clamp(
+          (now - recombine.start) / GLASS_TIMING.replay.recombineMs,
+          0,
+          1,
+        )
+        if (progress >= 1) {
+          recombineRef.current = null
+          recombinePostHold = 0
+          fractureStartRef.current = now
+          readingHoldRef.current = GLASS_TIMING.replay.replayHoldMs
+        } else {
+          recombineActive = true
+          recombinePostHold =
+            recombine.fromPostHold * (1 - easeOutCubic(progress))
+        }
+      }
+
+      const debugValue = debugTimeRef.current
+      if (debugValue !== null) {
+        recombineActive = false
+        recombinePostHold = null
+      }
+
       let fractureElapsed = 0
-      if (current.fractureMode === 'timed') {
+      if (recombineActive && recombinePostHold !== null) {
+        fractureElapsed = readingHoldRef.current + recombinePostHold
+      } else if (current.fractureMode === 'timed') {
         fractureElapsed = Math.max(0, now - pulseRef.current)
       } else if (fractureStartRef.current > 0) {
         fractureElapsed = Math.max(0, now - fractureStartRef.current)
       }
+      if (debugValue !== null) {
+        fractureElapsed = readingHoldRef.current + debugValue
+      }
+      debugElapsedRef.current = Math.max(
+        0,
+        fractureElapsed - readingHoldRef.current,
+      )
 
-      const postHold = Math.max(0, fractureElapsed - timing.intactHold)
-      const crackProgress = clamp(postHold / timing.crackDuration, 0, 1)
+      const postHold = recombineActive
+        ? (recombinePostHold ?? 0)
+        : Math.max(0, fractureElapsed - readingHoldRef.current)
+      const impactPhase = clamp(postHold / timing.impactDuration, 0, 1)
+      const crackExpansion = clamp(
+        (postHold - timing.impactDuration) / timing.crackDuration,
+        0,
+        1,
+      )
+      const crackProgress =
+        impactPhase < 1
+          ? impactPhase * 0.22
+          : 0.22 + crackExpansion * 0.78
+      const separationStart = timing.impactDuration + timing.crackDuration
       const separation = clamp(
-        (postHold - timing.crackDuration) / timing.burstDuration,
+        (postHold - separationStart) / timing.burstDuration,
         0,
         1,
       )
       const settle = clamp(
-        (postHold - timing.crackDuration - timing.burstDuration) /
+        (postHold - separationStart - timing.burstDuration) /
           timing.settleDuration,
         0,
         1,
       )
       const shatter =
-        easeOutCubic(separation) * (0.62 + easeOutCubic(settle) * 0.38)
+        easeOutCubic(separation) * (0.64 + easeOutCubic(settle) * 0.36)
       const motionFactor =
         clamp(shatter + current.fragmentBias, 0, 1.25) * timing.motionScale
       const restorationEnergy = clamp(
@@ -870,13 +969,17 @@ export function SoundTextCanvas({
         0.88,
       )
       const showFragments =
-        separation > 0.012 || motionFactor > 0.02 || restorationEnergy > 0.05
+        recombineActive ||
+        separation > 0.012 ||
+        motionFactor > 0.02 ||
+        restorationEnergy > 0.05
       const stressJitter =
         crackProgress * (0.5 + voice * 1.8) * (current.reducedMotion ? 0.25 : 1)
+      lastPostHoldRef.current = postHold
 
       if (import.meta.env.DEV) {
         const stage =
-          fractureElapsed < timing.intactHold
+          fractureElapsed < readingHoldRef.current
             ? 'intact'
             : separation === 0
               ? 'cracked'
@@ -886,6 +989,9 @@ export function SoundTextCanvas({
         canvas.dataset.glassStage = stage
         canvas.dataset.glassElapsed = Math.round(fractureElapsed).toString()
         canvas.dataset.glassOnset = onsetBoost.toFixed(2)
+        canvas.dataset.glassFragments = String(fragments.length)
+        canvas.dataset.glassSeeds = String(geometry.seedCount)
+        canvas.dataset.glassRecombine = String(recombineActive)
       }
 
       if (!showFragments) {
@@ -903,12 +1009,17 @@ export function SoundTextCanvas({
         }
         context.globalAlpha = 1
       } else {
-        // Keep a faint but readable silhouette as the memory anchor.
-        context.globalAlpha = clamp(0.14 + restorationEnergy * 0.06, 0.13, 0.2)
+        // The full silhouette fades as the pieces settle; fragments remain the anchor.
+        const ghostFade = 1 - settle * 0.65
+        context.globalAlpha = clamp(
+          (0.14 + restorationEnergy * 0.06) * ghostFade,
+          0.045,
+          0.2,
+        )
         context.drawImage(glyphSurface, 0, 0, width, height)
         context.globalAlpha = clamp(
-          (width < 660 ? 0.3 : 0.24) + restorationEnergy * 0.1,
-          width < 660 ? 0.27 : 0.22,
+          ((width < 660 ? 0.3 : 0.24) + restorationEnergy * 0.1) * ghostFade,
+          0.055,
           0.36,
         )
         context.strokeStyle = 'rgba(242, 242, 234, 0.62)'
@@ -935,9 +1046,12 @@ export function SoundTextCanvas({
       }
       context.globalAlpha = 1
 
-      const flashStart = timing.intactHold
-      if (fractureElapsed >= flashStart && fractureElapsed < flashStart + 140) {
-        const flash = 1 - (fractureElapsed - flashStart) / 140
+      const flashStart = readingHoldRef.current
+      if (
+        fractureElapsed >= flashStart &&
+        fractureElapsed < flashStart + timing.impactDuration
+      ) {
+        const flash = 1 - (fractureElapsed - flashStart) / timing.impactDuration
         for (const impact of impacts) {
           const gradient = context.createRadialGradient(
             impact.x,
@@ -957,18 +1071,43 @@ export function SoundTextCanvas({
 
       if (showFragments) {
         for (const fragment of fragments) {
+          const localPostHold = recombineActive
+            ? postHold
+            : Math.max(0, postHold - fragment.startDelay)
+          const localSeparation = recombineActive
+            ? separation
+            : clamp(
+                (localPostHold - separationStart) / timing.burstDuration,
+                0,
+                1,
+              )
+          const localSettle = recombineActive
+            ? settle
+            : clamp(
+                (localPostHold - separationStart - timing.burstDuration) /
+                  timing.settleDuration,
+                0,
+                1,
+              )
+          const localBreak =
+            easeOutCubic(localSeparation) *
+            (0.64 + easeOutCubic(localSettle) * 0.36)
+          const localMotionFactor = recombineActive
+            ? motionFactor
+            : clamp(localBreak + current.fragmentBias, 0, 1.25) *
+              timing.motionScale
           const restoredActive = fragment.restoreRank < restorationEnergy
           const restorePull = restoredActive
             ? clamp(restorationEnergy * 1.16, 0, 1)
             : clamp(restorationEnergy * 0.14, 0, 0.2)
           const suspend =
-            settle > 0
+            localSettle > 0
               ? Math.sin(time * 0.38 + fragment.phase) *
                 fragment.drift *
                 (current.reducedMotion ? 0.2 : 1.2)
               : 0
           const lift =
-            settle > 0
+            localSettle > 0
               ? Math.cos(time * 0.31 + fragment.phase * 1.4) *
                 fragment.drift *
                 (current.reducedMotion ? 0.18 : 0.85)
@@ -976,21 +1115,21 @@ export function SoundTextCanvas({
           const onsetKick =
             onsetBoost * (0.035 + (fragment.depth + 1) * 0.025)
           const localMotion =
-            (motionFactor + onsetKick) *
+            (localMotionFactor + onsetKick) *
             (1 - restorePull * 0.92) *
             (0.92 + voice * 0.13)
           const dx = (fragment.motionX * localMotion + suspend) * (1 - restorePull)
           const dy = (fragment.motionY * localMotion + lift) * (1 - restorePull)
           const rotation =
             fragment.rotation * localMotion * (1 - restorePull * 0.9) +
-            (settle > 0 && !restoredActive
+            (localSettle > 0 && !restoredActive
               ? Math.sin(time * 0.26 + fragment.phase) * 0.012
               : 0)
           const scale =
             fragment.scale * (1 + localMotion * (fragment.depth + 1) * 0.012)
           const opacity =
             fragment.opacity *
-            (1 - settle * 0.08) *
+            (1 - localSettle * 0.08) *
             (0.88 + (fragment.depth + 1) * 0.06) *
             (restoredActive ? 1 : 1 - restorationEnergy * 0.18)
           const sprite = restoredActive
@@ -1002,7 +1141,7 @@ export function SoundTextCanvas({
           if (
             width >= 660 &&
             !current.reducedMotion &&
-            settle > 0.35 &&
+            localSettle > 0.35 &&
             fragment.depth < -0.45
           ) {
             context.filter = `blur(${0.28 + Math.abs(fragment.depth) * 0.45}px)`
@@ -1046,6 +1185,9 @@ export function SoundTextCanvas({
         if (fractureStartRef.current > 0) {
           fractureStartRef.current += hiddenDuration
         }
+        if (recombineRef.current) {
+          recombineRef.current.start += hiddenDuration
+        }
         if (lastOnsetAtRef.current > 0) {
           lastOnsetAtRef.current += hiddenDuration
         }
@@ -1080,6 +1222,27 @@ export function SoundTextCanvas({
     }
   }, [chapter, reducedMotion, text])
 
+  const pauseDebugTimeline = () => {
+    setDebugTime(Math.round(debugElapsedRef.current))
+    setDebugFreeze(true)
+  }
+
+  const resumeDebugTimeline = () => {
+    const now = performance.now()
+    const breakTime = debugTime
+    if (propsRef.current.fractureMode === 'voice') {
+      fractureStartRef.current = now - (readingHoldRef.current + breakTime)
+    } else {
+      pulseRef.current = now - (readingHoldRef.current + breakTime)
+    }
+    setDebugFreeze(false)
+  }
+
+  const selectDebugTime = (value: number) => {
+    setDebugTime(value)
+    setDebugFreeze(true)
+  }
+
   return (
     <div className="sound-field">
       <canvas
@@ -1091,6 +1254,36 @@ export function SoundTextCanvas({
       <span className="sr-only" aria-live="polite">
         {text}
       </span>
+      {import.meta.env.DEV && (
+        <details className="glass-debug-panel" aria-label="玻璃破碎时间轴检查">
+          <summary>时间轴检查</summary>
+          <div className="glass-debug-panel__body">
+            <div className="glass-debug-panel__header">
+              <strong>破碎进度</strong>
+              <button type="button" onClick={debugFreeze ? resumeDebugTimeline : pauseDebugTimeline}>
+                {debugFreeze ? '从此刻继续' : '暂停在此刻'}
+              </button>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max={debugBreakDuration}
+              step="10"
+              value={debugTime}
+              onChange={(event) => selectDebugTime(Number(event.target.value))}
+              aria-label="玻璃破碎时间进度"
+            />
+            <div className="glass-debug-panel__marks">
+              {[0, 200, 400, 600, debugBreakDuration].map((value) => (
+                <button key={value} type="button" onClick={() => selectDebugTime(value)}>
+                  {value}ms
+                </button>
+              ))}
+            </div>
+            <p>0ms 完整字形 · 200ms 裂纹 · 400ms 分离 · 600ms 弹开 · 800ms 悬停</p>
+          </div>
+        </details>
+      )}
     </div>
   )
 }

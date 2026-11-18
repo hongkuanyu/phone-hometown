@@ -874,3 +874,38 @@ button { cursor: pointer; }
     padding-inline: 0.2rem;
   }
 }
+/* Development-only glass timeline inspector. Compiled out of production UI. */
+.glass-debug-panel {
+  position: fixed;
+  top: 5.4rem;
+  left: 1rem;
+  z-index: 90;
+  width: max-content;
+  padding: 0.45rem 0.65rem;
+  color: #b7aea0;
+  font-size: 0.62rem;
+  background: rgba(18, 18, 16, 0.94);
+  border: 1px solid #4b453d;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.glass-debug-panel[open] { width: min(17rem, calc(100vw - 2rem)); }
+.glass-debug-panel > summary { color: #bcb3a5; font-size: 0.62rem; letter-spacing: 0.05em; cursor: pointer; list-style: none; }
+.glass-debug-panel > summary::-webkit-details-marker { display: none; }
+.glass-debug-panel > summary::after { margin-left: 0.6rem; color: #71695f; content: '+'; }
+.glass-debug-panel[open] > summary::after { content: '−'; }
+.glass-debug-panel__body { padding-top: 0.65rem; }
+.glass-debug-panel__header,
+.glass-debug-panel__marks {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.glass-debug-panel__header strong { color: #d5cbbb; font-weight: 400; }
+.glass-debug-panel button { padding: 0.25rem 0; color: #aaa092; font-size: 0.6rem; border: 0; background: transparent; }
+.glass-debug-panel button:hover { color: #f2eee2; }
+.glass-debug-panel input { width: 100%; margin: 0.65rem 0 0.35rem; accent-color: #a84432; }
+.glass-debug-panel__marks { justify-content: flex-start; flex-wrap: wrap; }
+.glass-debug-panel p { margin-top: 0.45rem; color: #766f65; line-height: 1.55; }

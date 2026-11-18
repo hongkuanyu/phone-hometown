@@ -1,3 +1,4 @@
+import { GLASS_TIMING } from '../config/glassTiming'
 import type { AmbientMode, StoryTerm } from '../types'
 
 type AudioContextConstructor = typeof AudioContext
@@ -165,7 +166,10 @@ export class NarrativeAudio {
       0.016,
       0.12,
     )
-    const timeConstant = target > this.smoothedLevel ? 0.05 : 0.11
+    const timeConstant =
+      target > this.smoothedLevel
+        ? GLASS_TIMING.onset.attackSeconds
+        : GLASS_TIMING.onset.releaseSeconds
     const blend = 1 - Math.exp(-deltaSeconds / timeConstant)
     this.smoothedLevel += (target - this.smoothedLevel) * blend
     this.lastLevelAt = now
