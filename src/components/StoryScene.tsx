@@ -92,11 +92,12 @@ export function StoryScene({
   const term = chapter.terms[termIndex]
   const [pulse, setPulse] = useState(0)
   const [speaking, setSpeaking] = useState(false)
+  const [speakingDuration, setSpeakingDuration] = useState(6800)
+  const [speakingTick, setSpeakingTick] = useState(0)
   const [departingTermId, setDepartingTermId] = useState<string | null>(null)
   const [quickCapture, setQuickCapture] = useState(false)
   const termRef = useRef(term)
   const playedRef = useRef('')
-  const speechTimerRef = useRef<number | null>(null)
   const exitTimerRef = useRef<number | null>(null)
   const meaningButtonRef = useRef<HTMLButtonElement>(null)
   const isCooling = chapter.scene === 'cooling'
@@ -118,15 +119,16 @@ export function StoryScene({
   const micStopHold = mic.stopHold
 
   const markSpeaking = useCallback((duration = 6800) => {
-    if (speechTimerRef.current !== null) {
-      window.clearTimeout(speechTimerRef.current)
-    }
+    setSpeakingDuration(reducedMotion ? Math.min(duration, 2800) : duration)
     setSpeaking(true)
-    speechTimerRef.current = window.setTimeout(() => {
-      setSpeaking(false)
-      speechTimerRef.current = null
-    }, reducedMotion ? Math.min(duration, 2800) : duration)
+    setSpeakingTick((value) => value + 1)
   }, [reducedMotion])
+
+  useEffect(() => {
+    if (!speaking) return
+    const timer = window.setTimeout(() => setSpeaking(false), speakingDuration)
+    return () => window.clearTimeout(timer)
+  }, [speaking, speakingDuration, speakingTick])
 
   useEffect(() => {
     termRef.current = term
@@ -140,7 +142,6 @@ export function StoryScene({
 
   useEffect(() => {
     return () => {
-      if (speechTimerRef.current !== null) window.clearTimeout(speechTimerRef.current)
       if (exitTimerRef.current !== null) window.clearTimeout(exitTimerRef.current)
     }
   }, [])
@@ -291,7 +292,9 @@ export function StoryScene({
         ? '补充解释 · 部分复原'
         : isRestored
           ? '部分复原 · 仍有错位'
-          : '聚拢 · 松动 · 碎裂'
+          : speaking
+            ? '完整 · 受力 · 裂纹'
+            : '完整 · 裂纹 · 碎裂 · 悬停'
   return (
     <main
       className={`story-scene story-scene--${chapter.scene}`}
@@ -336,6 +339,8 @@ export function StoryScene({
           speaking={speaking && !audioPaused && !audioMuted}
           restored={isRestored}
           fragmentBias={isDeparting ? 0.55 : 0}
+          chapter={chapter.scene}
+          fractureMode="voice"
           labelPrefix="母亲的话"
         />
 

@@ -89,7 +89,9 @@ export function TransitionScene({
           audioLevel={audioLevel}
           restoration={0}
           reducedMotion={reducedMotion}
-          speaking={!audioPaused && !audioMuted}
+          speaking={false}
+          chapter="transition"
+          fractureMode="timed"
           labelPrefix="转场文字"
         />
         <p className="transition-note">文字被吹散，又在另一个夏夜重新排列。</p>

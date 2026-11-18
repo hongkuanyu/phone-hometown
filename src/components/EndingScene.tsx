@@ -100,7 +100,9 @@ export function EndingScene({
           restored={restoredTerms.length > 0}
           fragmentBias={skippedTerms.length > 2 ? 0.24 : 0}
           reducedMotion={reducedMotion}
-          speaking={!audioPaused && !audioMuted}
+          speaking={false}
+          chapter="ending"
+          fractureMode="timed"
           labelPrefix="结尾文字"
         />
         <p className="ending-small">
