@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { GLASS_TIMING } from '../config/glassTiming'
 import type { StoryScene } from '../types'
 
 type GlassChapter = StoryScene | 'transition' | 'ending'
@@ -701,7 +702,10 @@ export function SoundTextCanvas({
   })
   const pulseRef = useRef(0)
   const fractureStartRef = useRef(0)
-  const wasSpeakingRef = useRef(speaking)
+  const baselineLevelRef = useRef(0)
+  const lastOnsetAtRef = useRef(0)
+  const onsetBoostRef = useRef(0)
+  const onsetSamplesRef = useRef<Array<{ at: number; level: number }>>([])
 
   useEffect(() => {
     propsRef.current = {
@@ -728,18 +732,26 @@ export function SoundTextCanvas({
   ])
 
   useEffect(() => {
-    pulseRef.current = performance.now()
-    fractureStartRef.current = 0
-    wasSpeakingRef.current = propsRef.current.speaking
+    const now = performance.now()
+    pulseRef.current = now
+    fractureStartRef.current =
+      propsRef.current.fractureMode === 'voice' && propsRef.current.speaking
+        ? now + GLASS_TIMING.replay.aggregateMs
+        : 0
+    baselineLevelRef.current = 0
+    lastOnsetAtRef.current = 0
+    onsetBoostRef.current = 0
+    onsetSamplesRef.current = []
   }, [stateKey, replayToken])
 
   useEffect(() => {
-    if (speaking) {
-      fractureStartRef.current = 0
-      wasSpeakingRef.current = true
-    } else if (wasSpeakingRef.current) {
-      fractureStartRef.current = performance.now()
-      wasSpeakingRef.current = false
+    if (speaking && propsRef.current.fractureMode === 'voice') {
+      const now = performance.now()
+      if (fractureStartRef.current === 0) {
+        fractureStartRef.current = now + GLASS_TIMING.replay.aggregateMs
+      }
+      lastOnsetAtRef.current = now
+      onsetBoostRef.current = now + GLASS_TIMING.onset.boostDurationMs
     }
   }, [speaking])
 
@@ -778,35 +790,80 @@ export function SoundTextCanvas({
 
       const now = performance.now()
       const time = now / 1000
-      const sincePulse = (now - pulseRef.current) / 1000
-      const voice = clamp(current.audioLevel * 1.6, 0, 1)
-      const speaking = current.speaking && current.fractureMode === 'voice'
-      const preStress = speaking
-        ? clamp((sincePulse - 1.05) / 5.2, 0, 0.25) + voice * 0.1
-        : 0
+      const level = clamp(current.audioLevel, 0, 1)
+      const voice = clamp(level * 1.6, 0, 1)
+      const timing = current.reducedMotion
+        ? GLASS_TIMING.reduced
+        : GLASS_TIMING[current.chapter]
 
-      let fractureElapsed = 0
-      if (current.fractureMode === 'timed') {
-        fractureElapsed = Math.max(0, now - pulseRef.current - 350)
-      } else if (!current.speaking && fractureStartRef.current > 0) {
-        fractureElapsed = Math.max(0, now - fractureStartRef.current)
-      } else if (!current.speaking && sincePulse > 2.6) {
-        fractureElapsed = Math.max(0, (sincePulse - 2.6) * 1000)
+      // Dynamic onset detection: fast attack, slower release, short debounce.
+      const onset = GLASS_TIMING.onset
+      if (baselineLevelRef.current <= 0) {
+        baselineLevelRef.current = Math.max(0.012, level * 0.35)
       }
-
-      const crackDuration = 520 * (1.15 - voice * 0.22)
-      const crackProgress = clamp(
-        Math.max(preStress, fractureElapsed / crackDuration),
+      const baseline = baselineLevelRef.current
+      const dynamicThreshold = Math.max(
+        onset.minimumThreshold,
+        baseline * onset.baselineMultiplier + 0.01,
+      )
+      const samples = onsetSamplesRef.current
+      const previousWindowPeak = samples.length
+        ? Math.max(...samples.map((sample) => sample.level))
+        : baseline
+      const rising =
+        level - baseline > dynamicThreshold &&
+        level >= previousWindowPeak * 1.05
+      const onsetWindowOpen =
+        now - lastOnsetAtRef.current >= onset.debounceMs
+      const validOnset =
+        current.speaking &&
+        current.fractureMode === 'voice' &&
+        rising &&
+        level > dynamicThreshold * 1.25 &&
+        onsetWindowOpen
+      samples.push({ at: now, level })
+      while (samples.length > 0 && now - samples[0].at > onset.windowMs) {
+        samples.shift()
+      }
+      if (validOnset) {
+        lastOnsetAtRef.current = now
+        onsetBoostRef.current = now + onset.boostDurationMs
+        if (fractureStartRef.current === 0) {
+          fractureStartRef.current = now
+        }
+      }
+      baselineLevelRef.current +=
+        (level - baseline) * (level < baseline ? 0.14 : 0.045)
+      const onsetBoost = clamp(
+        (onsetBoostRef.current - now) / onset.boostDurationMs,
         0,
         1,
       )
-      const separation = speaking ? 0 : clamp((fractureElapsed - 500) / 400, 0, 1)
-      const settle = speaking ? 0 : clamp((fractureElapsed - 900) / 900, 0, 1)
+
+      let fractureElapsed = 0
+      if (current.fractureMode === 'timed') {
+        fractureElapsed = Math.max(0, now - pulseRef.current)
+      } else if (fractureStartRef.current > 0) {
+        fractureElapsed = Math.max(0, now - fractureStartRef.current)
+      }
+
+      const postHold = Math.max(0, fractureElapsed - timing.intactHold)
+      const crackProgress = clamp(postHold / timing.crackDuration, 0, 1)
+      const separation = clamp(
+        (postHold - timing.crackDuration) / timing.burstDuration,
+        0,
+        1,
+      )
+      const settle = clamp(
+        (postHold - timing.crackDuration - timing.burstDuration) /
+          timing.settleDuration,
+        0,
+        1,
+      )
       const shatter =
-        easeOutCubic(separation) * (0.55 + easeOutCubic(settle) * 0.45)
+        easeOutCubic(separation) * (0.62 + easeOutCubic(settle) * 0.38)
       const motionFactor =
-        clamp(shatter + current.fragmentBias, 0, 1.25) *
-        (current.reducedMotion ? 0.32 : 1)
+        clamp(shatter + current.fragmentBias, 0, 1.25) * timing.motionScale
       const restorationEnergy = clamp(
         current.restoration * 0.78 + (current.restored ? 0.1 : 0),
         0,
@@ -816,6 +873,20 @@ export function SoundTextCanvas({
         separation > 0.012 || motionFactor > 0.02 || restorationEnergy > 0.05
       const stressJitter =
         crackProgress * (0.5 + voice * 1.8) * (current.reducedMotion ? 0.25 : 1)
+
+      if (import.meta.env.DEV) {
+        const stage =
+          fractureElapsed < timing.intactHold
+            ? 'intact'
+            : separation === 0
+              ? 'cracked'
+              : settle < 1
+                ? 'burst'
+                : 'suspended'
+        canvas.dataset.glassStage = stage
+        canvas.dataset.glassElapsed = Math.round(fractureElapsed).toString()
+        canvas.dataset.glassOnset = onsetBoost.toFixed(2)
+      }
 
       if (!showFragments) {
         context.textAlign = 'center'
@@ -864,8 +935,9 @@ export function SoundTextCanvas({
       }
       context.globalAlpha = 1
 
-      if (!speaking && fractureElapsed < 190) {
-        const flash = 1 - fractureElapsed / 190
+      const flashStart = timing.intactHold
+      if (fractureElapsed >= flashStart && fractureElapsed < flashStart + 140) {
+        const flash = 1 - (fractureElapsed - flashStart) / 140
         for (const impact of impacts) {
           const gradient = context.createRadialGradient(
             impact.x,
@@ -879,27 +951,11 @@ export function SoundTextCanvas({
           gradient.addColorStop(0.24, `rgba(168, 68, 50, ${0.14 * flash})`)
           gradient.addColorStop(1, 'rgba(168, 68, 50, 0)')
           context.fillStyle = gradient
-          context.fillRect(
-            impact.x - 42,
-            impact.y - 42,
-            84,
-            84,
-          )
+          context.fillRect(impact.x - 42, impact.y - 42, 84, 84)
         }
       }
 
       if (showFragments) {
-        const chapterMotion =
-          current.chapter === 'call'
-            ? 0.62
-            : current.chapter === 'stove'
-              ? 0.84
-              : current.chapter === 'cooling'
-                ? 1.16
-                : current.chapter === 'ending'
-                  ? 1
-                  : 0.92
-
         for (const fragment of fragments) {
           const restoredActive = fragment.restoreRank < restorationEnergy
           const restorePull = restoredActive
@@ -917,9 +973,10 @@ export function SoundTextCanvas({
                 fragment.drift *
                 (current.reducedMotion ? 0.18 : 0.85)
               : 0
+          const onsetKick =
+            onsetBoost * (0.035 + (fragment.depth + 1) * 0.025)
           const localMotion =
-            motionFactor *
-            chapterMotion *
+            (motionFactor + onsetKick) *
             (1 - restorePull * 0.92) *
             (0.92 + voice * 0.13)
           const dx = (fragment.motionX * localMotion + suspend) * (1 - restorePull)
@@ -989,6 +1046,16 @@ export function SoundTextCanvas({
         if (fractureStartRef.current > 0) {
           fractureStartRef.current += hiddenDuration
         }
+        if (lastOnsetAtRef.current > 0) {
+          lastOnsetAtRef.current += hiddenDuration
+        }
+        if (onsetBoostRef.current > 0) {
+          onsetBoostRef.current += hiddenDuration
+        }
+        onsetSamplesRef.current = onsetSamplesRef.current.map((sample) => ({
+          ...sample,
+          at: sample.at + hiddenDuration,
+        }))
         hiddenAt = 0
       }
       if (animationFrame === 0) loop()

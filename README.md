@@ -23,6 +23,7 @@ npm run preview
 - `intro → call → stove → transition → cooling → ending → about` 完整状态机。
 - 电话 5 句、灶台 6 句、纳凉 6 句，包含重听、追问、查看意思、跳过、装作听懂与跟读。
 - Canvas 玻璃文字场：真实字形 alpha mask、稳定种子的不规则 Voronoi 碎片、分级裂纹扩散、冲击闪光、悬停漂移和冷白碎片复原；桌面 24—48 片、移动端 12—24 片，reduced-motion 进一步降级。
+- 玻璃破碎节奏集中在 `src/config/glassTiming.ts`：电话约 650ms、灶台约 760ms、纳凉约 580ms、结尾约 1050ms。
 - Web Audio 实时生成电话底噪、灶台火声/水声、夏夜虫鸣与扇子声。
 - 播放设置支持暂停/继续、当前章节重启、`0.85× / 1× / 1.15×` 速度、环境声与母亲声音独立音量。
 - 词义抽屉在桌面端为右侧面板，移动端为底部抽屉；支持焦点进入、Esc 关闭与焦点返回。
@@ -38,6 +39,7 @@ src/
   App.tsx                    场景状态机、播放与会话状态
   content/terms.ts           17 个词条与全部转写/解释内容
   content/scenes.ts          章节、首屏、结尾与作品说明文案
+  config/glassTiming.ts      玻璃破碎分段时间、声音起音阈值与章节速度
   audio/NarrativeAudio.ts    Web Audio 环境声与声音降级
   hooks/useMicRecorder.ts    麦克风跟读、音量/节奏分析与临时录音
   components/SoundTextCanvas.tsx

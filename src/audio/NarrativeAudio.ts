@@ -14,6 +14,8 @@ export class NarrativeAudio {
   private master: GainNode | null = null
   private analyser: AnalyserNode | null = null
   private analyserData = new Uint8Array(512)
+  private smoothedLevel = 0
+  private lastLevelAt = 0
   private ambientGain: GainNode | null = null
   private ambientSources: AudioScheduledSourceNode[] = []
   private ambientTimers: number[] = []
@@ -73,7 +75,7 @@ export class NarrativeAudio {
 
     master.gain.value = this.muted ? 0 : 0.72
     analyser.fftSize = 1024
-    analyser.smoothingTimeConstant = 0.82
+    analyser.smoothingTimeConstant = 0.08
     voiceGain.gain.value = this.voiceVolume
 
     voiceGain.connect(master)
@@ -156,7 +158,18 @@ export class NarrativeAudio {
       const normalized = (sample - 128) / 128
       sum += normalized * normalized
     }
-    return clamp(Math.sqrt(sum / this.analyserData.length) * 3.2, 0, 1)
+    const target = Math.sqrt(sum / this.analyserData.length)
+    const now = performance.now()
+    const deltaSeconds = clamp(
+      this.lastLevelAt ? (now - this.lastLevelAt) / 1000 : 0.045,
+      0.016,
+      0.12,
+    )
+    const timeConstant = target > this.smoothedLevel ? 0.05 : 0.11
+    const blend = 1 - Math.exp(-deltaSeconds / timeConstant)
+    this.smoothedLevel += (target - this.smoothedLevel) * blend
+    this.lastLevelAt = now
+    return clamp(this.smoothedLevel * 3.2, 0, 1)
   }
 
   setAmbient(mode: AmbientMode, source?: string) {
