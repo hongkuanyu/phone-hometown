@@ -1,20 +1,19 @@
 # 声音素材目录
 
-当前版本没有随仓库附带真实人声录音。页面使用 Web Audio API 生成环境声和声音占位，并在浏览器支持时叠加本地中文语音合成，方便先完成整段交互。
+当前公开版本没有附带真实亲属录音。页面使用 Web Audio API 生成环境声和声音占位，并在浏览器支持时叠加本地中文语音合成。
 
 ## 替换为家庭确认的录音
 
-1. 只放入已获得本人授权的录音，建议使用 `.mp3`、`.m4a` 或 `.wav`。
-2. 建议命名：
-   - `call-01.mp3`
-   - `stove-01.mp3`
-   - `cooling-01.mp3`
-   - `kitchen-ambience.mp3`
-   - `night-ambience.mp3`
-3. 打开 `src/data/story.ts`，在对应词条的 `audioSrc` 填入相对路径，例如：
+1. 只放入已获得本人授权、允许公开展示的录音。
+2. 建议使用 `.mp3`、`.m4a` 或 `.wav`，命名与词条 ID 对应：
+   - `call-01.mp3` … `call-05.mp3`
+   - `stove-01.mp3` … `stove-06.mp3`
+   - `cooling-01.mp3` … `cooling-06.mp3`
+3. 打开 `src/content/terms.ts`，给对应词条增加：
    `audioSrc: 'audio/call-01.mp3'`
-4. 如要替换章节环境声，可给 `StoryChapter` 增加 `ambientSrc` 并在 `App.tsx` 中传给 `setAmbient`。真实素材应保持低音量、长循环且不抢人声。
-5. 方言转写请由家庭成员确认后替换，不要把占位文字当作标准答案。
+4. 真实录音应保持清晰、单声道或兼容立体声，并避免过强压缩。不要依赖左右声道区分含义。
+5. 如替换章节环境声，可在 `StoryChapter` 增加 `ambientSrc`，并在 `App.tsx` 的 `setAmbient` 调用中传入。
+6. 方言转写需由家庭成员确认后再更新 `familyText`、`pronunciation`、`mandarinHint`、`context` 与 `supplement`。
 
 ## 隐私
 

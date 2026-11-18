@@ -7,7 +7,9 @@ interface SoundTextCanvasProps {
   audioLevel: number
   restoration: number
   reducedMotion: boolean
+  speaking?: boolean
   restored?: boolean
+  fragmentBias?: number
   labelPrefix?: string
 }
 
@@ -39,11 +41,17 @@ const bodyFont =
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value))
 
-function makeGeometry(width: number, height: number, text: string): Geometry {
+function makeGeometry(
+  width: number,
+  height: number,
+  text: string,
+  reducedMotion: boolean,
+): Geometry {
   const chars = Array.from(text.replace(/\s+/g, ''))
   const vertical = width < 660
   const fragments: Fragment[] = []
-  const bandCount = 7
+  // Fewer strips on phones and in reduced-motion mode keep the canvas light.
+  const bandCount = reducedMotion ? 3 : vertical ? 5 : 7
   const positions: Array<{ x: number; y: number; size: number }> = []
 
   if (vertical) {
@@ -97,9 +105,9 @@ function makeGeometry(width: number, height: number, text: string): Geometry {
         size: position.size,
         band,
         bands: bandCount,
-        scatterX: (Math.random() * 2 - 1) * 2.8,
-        scatterY: (Math.random() * 2 - 1) * 2.2,
-        rotation: (Math.random() * 2 - 1) * 0.24,
+        scatterX: (Math.random() * 2 - 1) * 0.32,
+        scatterY: (Math.random() * 2 - 1) * 0.24,
+        rotation: (Math.random() * 2 - 1) * 0.22,
         phase: index * 0.73 + band * 0.035,
         restoreRank: Math.random(),
         weight,
@@ -109,7 +117,6 @@ function makeGeometry(width: number, height: number, text: string): Geometry {
 
   return { width, height, fragments }
 }
-
 export function SoundTextCanvas({
   text,
   stateKey,
@@ -117,7 +124,9 @@ export function SoundTextCanvas({
   audioLevel,
   restoration,
   reducedMotion,
+  speaking = false,
   restored = false,
+  fragmentBias = 0,
   labelPrefix = '声音文字场',
 }: SoundTextCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -126,13 +135,23 @@ export function SoundTextCanvas({
     audioLevel,
     restoration,
     reducedMotion,
+    speaking,
     restored,
+    fragmentBias,
   })
   const pulseRef = useRef(0)
 
   useEffect(() => {
-    propsRef.current = { text, audioLevel, restoration, reducedMotion, restored }
-  }, [text, audioLevel, restoration, reducedMotion, restored])
+    propsRef.current = {
+      text,
+      audioLevel,
+      restoration,
+      reducedMotion,
+      speaking,
+      restored,
+      fragmentBias,
+    }
+  }, [text, audioLevel, restoration, reducedMotion, speaking, restored, fragmentBias])
 
   useEffect(() => {
     pulseRef.current = performance.now()
@@ -144,7 +163,7 @@ export function SoundTextCanvas({
     const context = canvas.getContext('2d')
     if (!context) return
 
-    let geometry = makeGeometry(1, 1, text)
+    let geometry = makeGeometry(1, 1, text, reducedMotion)
     let animationFrame = 0
     let resizeFrame = 0
     const font = bodyFont
@@ -155,7 +174,7 @@ export function SoundTextCanvas({
       canvas.width = Math.max(1, Math.round(rect.width * dpr))
       canvas.height = Math.max(1, Math.round(rect.height * dpr))
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
-      geometry = makeGeometry(rect.width, rect.height, text)
+      geometry = makeGeometry(rect.width, rect.height, text, reducedMotion)
     }
 
     const draw = () => {
@@ -164,17 +183,24 @@ export function SoundTextCanvas({
       context.clearRect(0, 0, width, height)
       if (!current.text) return
 
-      const time = performance.now() / 1000
-      const sincePulse = (performance.now() - pulseRef.current) / 1000
+      const now = performance.now()
+      const time = now / 1000
+      const sincePulse = (now - pulseRef.current) / 1000
       const movement = current.reducedMotion ? 0.16 : 1
-      const voice = clamp(current.audioLevel * 1.45, 0, 1)
+      const voice = clamp(
+        current.audioLevel * 1.45 + (current.speaking ? 0.2 : 0),
+        0,
+        1,
+      )
       const arrival = clamp(sincePulse / 0.75, 0, 1)
       const loosen = clamp((sincePulse - 2.8) / 4.2, 0, 1)
       const gather = clamp(0.2 + arrival * 0.64 + voice * 0.36, 0, 1)
       const dispersion = clamp(
-        (1 - gather) * 1.12 + loosen * (1 - voice * 0.7) * 0.62,
+        (1 - gather) * 1.12 +
+          loosen * (1 - voice * 0.7) * 0.62 +
+          current.fragmentBias * 0.52,
         0,
-        1.15,
+        1.24,
       )
       const restorationEnergy = clamp(
         current.restoration + (current.restored ? 0.2 : 0),
@@ -182,11 +208,11 @@ export function SoundTextCanvas({
         1,
       )
 
-      // A faint imprint keeps the word legible while the slices continue to drift.
+      // A soft imprint preserves at least part of the character silhouette.
       context.textAlign = 'center'
       context.textBaseline = 'middle'
       context.fillStyle = '#A84432'
-      context.globalAlpha = clamp(0.08 + (1 - dispersion) * 0.58, 0.08, 0.58)
+      context.globalAlpha = clamp(0.16 + (1 - dispersion) * 0.34, 0.12, 0.5)
       for (const fragment of geometry.fragments) {
         if (fragment.band !== 0) continue
         context.font = `${fragment.weight} ${fragment.size}px ${font}`
@@ -201,7 +227,13 @@ export function SoundTextCanvas({
         const localRestore = isRestored
           ? 0.72 + restorationEnergy * 0.28
           : restorationEnergy * 0.16
-        const localDispersion = dispersion * (1 - localRestore * 0.86) * movement
+        // Every fourth character is a steadier anchor; the rest loosen at different rates.
+        const anchor = fragment.charIndex % 4 === 0
+        const characterWeight = anchor
+          ? 0.42
+          : 0.72 + ((fragment.charIndex * 7) % 5) * 0.08
+        const localDispersion =
+          dispersion * characterWeight * (1 - localRestore * 0.86) * movement
         const wanderX =
           Math.sin(time * 0.52 + fragment.phase) *
           (0.8 + localDispersion * 19) *
@@ -297,7 +329,7 @@ export function SoundTextCanvas({
       cancelAnimationFrame(animationFrame)
       cancelAnimationFrame(resizeFrame)
     }
-  }, [text])
+  }, [reducedMotion, text])
 
   return (
     <div className="sound-field">

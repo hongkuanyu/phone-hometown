@@ -2,6 +2,8 @@
 
 一段约 5—8 分钟的浏览器互动叙事。一个不会说常州话的年轻人，在母亲不断切换的方言里靠近她的日常、记忆与过去，却始终只能听懂一部分。
 
+线上地址：<https://hongkuanyu.github.io/phone-hometown/>
+
 ## 本地运行
 
 ```bash
@@ -9,80 +11,80 @@ npm install
 npm run dev
 ```
 
-生产构建：
+生产构建与预览：
 
 ```bash
 npm run build
 npm run preview
 ```
 
-## 已实现的体验
+## 当前体验
 
 - `intro → call → stove → transition → cooling → ending → about` 完整状态机。
-- Canvas 声音文字场：聚合、松动、碎裂、部分复原，并保留轻微错位。
-- Web Audio API 生成电话底噪、灶台、夏夜虫鸣等占位环境声。
-- 可选普通话提示与独立词义抽屉，默认关闭。
-- 纳凉章节的“按住跟读”：仅分析音量、起音和节奏，不做识别、评分或上传。
-- 麦克风拒绝、`MediaRecorder` 不可用或无音频素材时，自动进入节奏替代模式，不阻断故事。
-- 页面不可见时暂停音频分析与 Canvas 动画；支持键盘焦点与 `prefers-reduced-motion`。
-- 声音档案只保存在当前标签页内存中，刷新即清除。
+- 电话 5 句、灶台 6 句、纳凉 6 句，包含重听、追问、查看意思、跳过、装作听懂与跟读。
+- Canvas 声音文字场：聚合、松动、碎裂、部分复原，并保留关键词轮廓和轻微错位。
+- Web Audio 实时生成电话底噪、灶台火声/水声、夏夜虫鸣与扇子声。
+- 播放设置支持暂停/继续、当前章节重启、`0.85× / 1× / 1.15×` 速度、环境声与母亲声音独立音量。
+- 词义抽屉在桌面端为右侧面板，移动端为底部抽屉；支持焦点进入、Esc 关闭与焦点返回。
+- 跟读只分析音量、起音、持续时间和节奏，不做语音识别、评分或发音判断。
+- 麦克风被拒绝或 `MediaRecorder` 不可用时自动切换为触摸/空格节奏模式，不阻断故事。
+- 声音档案只存在于当前标签页内存中，刷新或关闭标签页即清除。
+- 支持 `prefers-reduced-motion`、键盘操作、移动端安全区和 320px 起窄屏布局。
 
-## 主要文件
+## 内容与素材结构
 
 ```text
 src/
-  App.tsx                    场景状态机与会话状态
-  data/story.ts              章节、词条、文案和可选录音路径
-  data/theme.ts              颜色令牌
+  App.tsx                    场景状态机、播放与会话状态
+  content/terms.ts           17 个词条与全部转写/解释内容
+  content/scenes.ts          章节、首屏、结尾与作品说明文案
   audio/NarrativeAudio.ts    Web Audio 环境声与声音降级
   hooks/useMicRecorder.ts    麦克风跟读、音量/节奏分析与临时录音
   components/SoundTextCanvas.tsx
   components/StoryScene.tsx
   components/AboutScene.tsx
-public/audio/                 可替换的真实音频素材目录
+public/audio/                 可替换的授权音频素材目录
 .github/workflows/deploy.yml GitHub Pages 部署工作流
 ```
 
-## 替换真实录音和方言词条
+当前没有真实亲属录音。母亲声音由浏览器中文语音合成叠加 Web Audio 占位声纹构成，环境声全部由 Web Audio 生成；它们不会被描述为真实母亲录音。
 
-素材说明见 `public/audio/README.md`。配置集中在 `src/data/story.ts`，每个词条包含：
+## 替换真实录音
 
-- `familyText`：家庭转写
-- `spokenText`：用于占位语音或真实录音对应的朗读文本
-- `pronunciation`：近似读音
-- `mandarinHint`：普通话提示
-- `context`：生活场景说明
-- `audioSrc`：可选的真实本地录音路径
+素材说明见 `public/audio/README.md`。在 `src/content/terms.ts` 对应词条中补充：
 
-当前所有方言写法均为叙事占位，不是“常州话标准答案”。正式发布前应由家庭成员确认录音、转写和授权。
+```ts
+audioSrc: 'audio/call-01.mp3'
+```
+
+路径相对于站点 `base`。真实录音应只使用本人明确授权、允许公开的本地文件。方言转写应同时由家庭成员确认，展示内容不应把任何写法视为常州话标准答案。
+
+词条的素材确认状态保留在数据字段 `transcriptStatus` 中，不显示在普通观众界面。
 
 ## 麦克风与隐私
 
 - 页面加载和 intro 不申请麦克风。
 - 只有按住“跟读”时才调用 `getUserMedia`。
 - 录音不发送到网络、不写入 `localStorage` / IndexedDB、不持久化。
-- 权限被拒绝后不会反复请求，按住跟读会切换为不录音的节奏替代模式。
-- 录音片段只存在于当前标签页的内存中，刷新后自动清除。
+- 权限被拒绝后不会反复请求，跟读会切换为不录音的节奏替代模式。
+- 录音片段只存在于当前标签页的内存中，刷新后清除。
 
-## GitHub Pages 部署
+## GitHub Pages
 
-`vite.config.ts` 会在 GitHub Actions 中读取 `GITHUB_REPOSITORY`，自动把 `base` 设置为仓库名路径。工作流位于 `.github/workflows/deploy.yml`。
+`vite.config.ts` 根据 GitHub Actions 提供的 `GITHUB_REPOSITORY` 自动设置仓库路径。部署工作流位于 `.github/workflows/deploy.yml`，推送到 `main` 后自动触发。
 
-首次部署步骤：
+发布流程：
 
 ```bash
-git init
 git add .
-git commit -m "feat: build interactive dialect audio narrative"
-git branch -M main
-git remote add origin https://github.com/<用户名>/phone-hometown.git
-git push -u origin main
+git commit -m "feat: refine phone hometown interactive narrative"
+git push
 ```
 
-然后在 GitHub 仓库的 **Settings → Pages → Build and deployment** 中将 Source 设为 **GitHub Actions**。工作流成功后，预计地址为：
+GitHub 仓库 **Settings → Pages → Build and deployment** 的 Source 应为 **GitHub Actions**。
+
+预计地址：
 
 ```text
-https://<用户名>.github.io/phone-hometown/
+https://hongkuanyu.github.io/phone-hometown/
 ```
-
-如果仓库名不同，`vite.config.ts` 会随 GitHub Actions 的仓库名自动适配，无需手动修改。

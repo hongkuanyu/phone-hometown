@@ -1,4 +1,4 @@
-import { introCopy } from '../data/story'
+import { introCopy } from '../content/scenes'
 
 interface IntroSceneProps {
   onStart: () => void
@@ -18,7 +18,7 @@ export function IntroScene({ onStart, onOpenAbout }: IntroSceneProps) {
       </div>
 
       <section className="intro-content" aria-labelledby="intro-title">
-        <p className="intro-kicker">一段声音叙事</p>
+        <p className="intro-kicker">{introCopy.duration}</p>
         <h1 id="intro-title">
           她在电话里
           <br />

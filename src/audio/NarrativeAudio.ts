@@ -6,9 +6,8 @@ const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value))
 
 /**
- * Small Web Audio soundscape engine.
- * It prefers an authorized local recording when one is configured and otherwise
- * creates a clearly replaceable synthetic voice/ambience placeholder.
+ * Web Audio soundscape with an explicit placeholder voice path.
+ * Authorized local recordings take priority when an audioSrc is configured.
  */
 export class NarrativeAudio {
   private context: AudioContext | null = null
@@ -18,9 +17,16 @@ export class NarrativeAudio {
   private ambientGain: GainNode | null = null
   private ambientSources: AudioScheduledSourceNode[] = []
   private ambientTimers: number[] = []
+  private ambientBaseGain = 0.5
+  private ambientVolume = 0.58
+  private ambientDucked = false
   private voiceGain: GainNode | null = null
+  private activeVoiceSources: AudioScheduledSourceNode[] = []
+  private voiceVolume = 0.9
   private noiseBuffer: AudioBuffer | null = null
   private muted = false
+  private paused = false
+  private hidden = false
   private voiceToken = 0
   private currentUtterance: SpeechSynthesisUtterance | null = null
 
@@ -36,10 +42,14 @@ export class NarrativeAudio {
     return this.muted
   }
 
+  get isPaused() {
+    return this.paused
+  }
+
   async unlock(): Promise<boolean> {
     if (!this.supported) return false
     const context = this.ensureContext()
-    if (context.state === 'suspended') {
+    if (context.state === 'suspended' && !this.paused && !this.hidden) {
       try {
         await context.resume()
       } catch {
@@ -64,7 +74,7 @@ export class NarrativeAudio {
     master.gain.value = this.muted ? 0 : 0.72
     analyser.fftSize = 1024
     analyser.smoothingTimeConstant = 0.82
-    voiceGain.gain.value = 1
+    voiceGain.gain.value = this.voiceVolume
 
     voiceGain.connect(master)
     master.connect(analyser)
@@ -97,12 +107,45 @@ export class NarrativeAudio {
       this.master.gain.setTargetAtTime(
         muted ? 0 : 0.72,
         this.context.currentTime,
-        0.04,
+        0.05,
       )
     }
-    if (muted) {
-      this.stopVoice()
+    if (muted) this.stopVoice()
+  }
+
+  setVoiceVolume(value: number) {
+    this.voiceVolume = clamp(value, 0, 1)
+    if (this.voiceGain && this.context) {
+      this.voiceGain.gain.setTargetAtTime(
+        this.voiceVolume,
+        this.context.currentTime,
+        0.08,
+      )
     }
+    if (this.currentUtterance) {
+      this.currentUtterance.volume = clamp(this.voiceVolume * 0.82, 0, 1)
+    }
+  }
+
+  setAmbientVolume(value: number) {
+    this.ambientVolume = clamp(value, 0, 1)
+    this.updateAmbientGain(0.08)
+  }
+
+  setAmbientDucked(ducked: boolean) {
+    this.ambientDucked = ducked
+    this.updateAmbientGain(0.18)
+  }
+
+  private updateAmbientGain(timeConstant = 0.18) {
+    if (!this.context || !this.ambientGain) return
+    const target =
+      this.ambientBaseGain * this.ambientVolume * (this.ambientDucked ? 0.3 : 1)
+    this.ambientGain.gain.setTargetAtTime(
+      target,
+      this.context.currentTime,
+      timeConstant,
+    )
   }
 
   getLevel() {
@@ -126,6 +169,8 @@ export class NarrativeAudio {
     gain.gain.value = 0
     gain.connect(this.master)
     this.ambientGain = gain
+    this.ambientBaseGain =
+      mode === 'phone' ? 0.44 : mode === 'kitchen' ? 0.56 : 0.46
 
     if (source) {
       void this.loadAmbientBuffer(source, gain).catch(() => {
@@ -135,11 +180,7 @@ export class NarrativeAudio {
       this.buildGeneratedAmbient(mode, gain)
     }
 
-    gain.gain.setTargetAtTime(
-      mode === 'phone' ? 0.52 : mode === 'kitchen' ? 0.62 : 0.48,
-      context.currentTime,
-      0.55,
-    )
+    this.updateAmbientGain(0.55)
   }
 
   private async loadAmbientBuffer(source: string, destination: GainNode) {
@@ -154,8 +195,10 @@ export class NarrativeAudio {
     bufferSource.start()
     this.ambientSources.push(bufferSource)
   }
-
-  private buildGeneratedAmbient(mode: Exclude<AmbientMode, 'none'>, gain: GainNode) {
+  private buildGeneratedAmbient(
+    mode: Exclude<AmbientMode, 'none'>,
+    gain: GainNode,
+  ) {
     const context = this.ensureContext()
     if (!this.noiseBuffer) return
 
@@ -169,16 +212,16 @@ export class NarrativeAudio {
     if (mode === 'phone') {
       filter.type = 'lowpass'
       filter.frequency.value = 760
-      texture.gain.value = 0.055
+      texture.gain.value = 0.05
     } else if (mode === 'kitchen') {
       filter.type = 'bandpass'
-      filter.frequency.value = 1100
+      filter.frequency.value = 1080
       filter.Q.value = 0.55
-      texture.gain.value = 0.075
+      texture.gain.value = 0.072
     } else {
       filter.type = 'highpass'
-      filter.frequency.value = 1500
-      texture.gain.value = 0.035
+      filter.frequency.value = 1450
+      texture.gain.value = 0.032
     }
 
     noise.connect(filter)
@@ -190,8 +233,8 @@ export class NarrativeAudio {
     const hum = context.createOscillator()
     const humGain = context.createGain()
     hum.type = 'sine'
-    hum.frequency.value = mode === 'phone' ? 62 : mode === 'kitchen' ? 47 : 82
-    humGain.gain.value = mode === 'phone' ? 0.014 : 0.008
+    hum.frequency.value = mode === 'phone' ? 62 : mode === 'kitchen' ? 46 : 82
+    humGain.gain.value = mode === 'phone' ? 0.012 : 0.006
     hum.connect(humGain)
     humGain.connect(gain)
     hum.start()
@@ -199,18 +242,26 @@ export class NarrativeAudio {
 
     if (mode === 'kitchen') {
       const crackleTimer = window.setInterval(() => {
-        if (this.muted || document.hidden || !this.context) return
+        if (this.muted || this.paused || this.hidden || !this.context) return
         this.scheduleCrackle(gain)
-      }, 720)
-      this.ambientTimers.push(crackleTimer)
+      }, 760)
+      const waterTimer = window.setInterval(() => {
+        if (this.muted || this.paused || this.hidden || !this.context) return
+        this.scheduleWaterPulse(gain)
+      }, 2300)
+      this.ambientTimers.push(crackleTimer, waterTimer)
     }
 
     if (mode === 'night') {
       const chirpTimer = window.setInterval(() => {
-        if (this.muted || document.hidden || !this.context) return
+        if (this.muted || this.paused || this.hidden || !this.context) return
         this.scheduleChirp(gain)
-      }, 1280)
-      this.ambientTimers.push(chirpTimer)
+      }, 1300)
+      const fanTimer = window.setInterval(() => {
+        if (this.muted || this.paused || this.hidden || !this.context) return
+        this.scheduleFanTick(gain)
+      }, 2100)
+      this.ambientTimers.push(chirpTimer, fanTimer)
     }
   }
 
@@ -225,13 +276,48 @@ export class NarrativeAudio {
     filter.type = 'highpass'
     filter.frequency.value = 1900 + Math.random() * 900
     gain.gain.setValueAtTime(0.0001, now)
-    gain.gain.exponentialRampToValueAtTime(0.035 + Math.random() * 0.03, now + 0.01)
+    gain.gain.exponentialRampToValueAtTime(0.032 + Math.random() * 0.025, now + 0.01)
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08)
     source.connect(filter)
     filter.connect(gain)
     gain.connect(destination)
     source.start(now, Math.random() * 2)
     source.stop(now + 0.1)
+  }
+
+  private scheduleWaterPulse(destination: GainNode) {
+    const context = this.ensureContext()
+    if (this.muted) return
+    const now = context.currentTime
+    const oscillator = context.createOscillator()
+    const gain = context.createGain()
+    oscillator.type = 'sine'
+    oscillator.frequency.setValueAtTime(180 + Math.random() * 60, now)
+    oscillator.frequency.exponentialRampToValueAtTime(90, now + 0.28)
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.exponentialRampToValueAtTime(0.008, now + 0.04)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32)
+    oscillator.connect(gain)
+    gain.connect(destination)
+    oscillator.start(now)
+    oscillator.stop(now + 0.34)
+  }
+
+  private scheduleFanTick(destination: GainNode) {
+    const context = this.ensureContext()
+    if (this.muted) return
+    const now = context.currentTime
+    const oscillator = context.createOscillator()
+    const gain = context.createGain()
+    oscillator.type = 'triangle'
+    oscillator.frequency.value = 210
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.exponentialRampToValueAtTime(0.0035, now + 0.02)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15)
+    oscillator.connect(gain)
+    gain.connect(destination)
+    oscillator.start(now)
+    oscillator.stop(now + 0.17)
   }
 
   private scheduleChirp(destination: GainNode) {
@@ -244,7 +330,7 @@ export class NarrativeAudio {
     oscillator.frequency.setValueAtTime(3100, now)
     oscillator.frequency.exponentialRampToValueAtTime(3900, now + 0.08)
     gain.gain.setValueAtTime(0.0001, now)
-    gain.gain.exponentialRampToValueAtTime(0.012, now + 0.025)
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.025)
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16)
     oscillator.connect(gain)
     gain.connect(destination)
@@ -274,9 +360,10 @@ export class NarrativeAudio {
     }, 900)
     this.ambientGain = null
   }
-
   async playTerm(term: StoryTerm, rate = 1): Promise<'recording' | 'placeholder'> {
-    if (!this.context || this.muted) return 'placeholder'
+    if (!this.context || this.muted || this.paused || this.hidden) {
+      return 'placeholder'
+    }
     this.stopVoice()
     const token = this.voiceToken
 
@@ -294,11 +381,11 @@ export class NarrativeAudio {
     return 'placeholder'
   }
 
-  playHint(text: string) {
-    if (!this.context || this.muted) return
+  playHint(text: string, rate = 0.9) {
+    if (!this.context || this.muted || this.paused || this.hidden) return
     this.stopVoice()
-    this.playBreathPulse(text, 0.9, 0.22)
-    this.speakPlaceholder(text, 0.9, 0.45)
+    this.playBreathPulse(text, rate, 0.24)
+    this.speakPlaceholder(text, rate, 0.52)
   }
 
   private async playAudioSource(source: string, rate: number, token: number) {
@@ -320,13 +407,17 @@ export class NarrativeAudio {
     filter.connect(gain)
     gain.connect(this.voiceGain!)
     sourceNode.start()
+    this.activeVoiceSources.push(sourceNode)
+    sourceNode.onended = () => {
+      this.activeVoiceSources = this.activeVoiceSources.filter((node) => node !== sourceNode)
+    }
   }
 
-  private playBreathPulse(text: string, rate: number, volume = 0.55) {
+  private playBreathPulse(text: string, rate: number, volume = 0.58) {
     const context = this.ensureContext()
     if (!this.voiceGain) return
-    const duration = clamp(text.length * 0.16, 2.6, 5.2) / Math.max(0.7, rate)
-    const syllables = Math.max(4, Math.min(16, Array.from(text).length))
+    const duration = clamp(text.length * 0.17, 4.2, 8.8) / Math.max(0.7, rate)
+    const syllables = Math.max(6, Math.min(24, Array.from(text).length))
     const start = context.currentTime + 0.04
     const step = duration / syllables
 
@@ -335,7 +426,7 @@ export class NarrativeAudio {
       const formant = context.createBiquadFilter()
       const gain = context.createGain()
       const pulseStart = start + index * step
-      const pulseLength = Math.min(step * 0.78, 0.28)
+      const pulseLength = Math.min(step * 0.78, 0.3)
       const frequency = 138 + Math.sin(index * 1.73) * 18 + Math.random() * 9
 
       oscillator.type = 'sawtooth'
@@ -349,7 +440,7 @@ export class NarrativeAudio {
       formant.Q.value = 1.5
       gain.gain.setValueAtTime(0.0001, pulseStart)
       gain.gain.exponentialRampToValueAtTime(
-        volume * (0.025 + Math.random() * 0.022),
+        volume * (0.024 + Math.random() * 0.02),
         pulseStart + 0.035,
       )
       gain.gain.exponentialRampToValueAtTime(0.0001, pulseStart + pulseLength)
@@ -358,6 +449,10 @@ export class NarrativeAudio {
       gain.connect(this.voiceGain)
       oscillator.start(pulseStart)
       oscillator.stop(pulseStart + pulseLength + 0.03)
+      this.activeVoiceSources.push(oscillator)
+      oscillator.onended = () => {
+        this.activeVoiceSources = this.activeVoiceSources.filter((node) => node !== oscillator)
+      }
     }
   }
 
@@ -375,7 +470,7 @@ export class NarrativeAudio {
     utterance.lang = 'zh-CN'
     utterance.rate = clamp(rate, 0.65, 1.15)
     utterance.pitch = 0.82
-    utterance.volume = clamp(volume, 0, 1)
+    utterance.volume = clamp(this.voiceVolume * volume, 0, 1)
     this.currentUtterance = utterance
     utterance.onend = () => {
       if (this.currentUtterance === utterance) this.currentUtterance = null
@@ -385,25 +480,55 @@ export class NarrativeAudio {
 
   stopVoice() {
     this.voiceToken += 1
+    this.activeVoiceSources.forEach((source) => {
+      try {
+        source.stop()
+      } catch {
+        // The source may already have ended.
+      }
+    })
+    this.activeVoiceSources = []
     if ('speechSynthesis' in window) window.speechSynthesis.cancel()
     this.currentUtterance = null
     if (this.voiceGain && this.context) {
       const now = this.context.currentTime
       this.voiceGain.gain.cancelScheduledValues(now)
       this.voiceGain.gain.setTargetAtTime(0, now, 0.025)
-      this.voiceGain.gain.setTargetAtTime(1, now + 0.15, 0.04)
+      this.voiceGain.gain.setTargetAtTime(
+        this.voiceVolume,
+        now + 0.15,
+        0.04,
+      )
     }
   }
 
+  setPaused(paused: boolean) {
+    this.paused = paused
+    if ('speechSynthesis' in window) {
+      if (paused) window.speechSynthesis.pause()
+      else if (!this.hidden) window.speechSynthesis.resume()
+    }
+    this.syncContextState()
+  }
+
   pauseForVisibility(hidden: boolean) {
+    this.hidden = hidden
     if ('speechSynthesis' in window) {
       if (hidden) window.speechSynthesis.pause()
-      else window.speechSynthesis.resume()
+      else if (!this.paused) window.speechSynthesis.resume()
     }
+    this.syncContextState()
+  }
+
+  private syncContextState() {
     if (!this.context) return
-    if (hidden && this.context.state === 'running') {
+    if ((this.paused || this.hidden) && this.context.state === 'running') {
       void this.context.suspend()
-    } else if (!hidden && this.context.state === 'suspended') {
+    } else if (
+      !this.paused &&
+      !this.hidden &&
+      this.context.state === 'suspended'
+    ) {
       void this.context.resume()
     }
   }

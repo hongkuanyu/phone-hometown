@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { aboutCopy, placeholderNotice } from '../data/story'
+import { aboutCopy } from '../content/scenes'
 import type { RecordedFragment } from '../types'
+
+interface PathSummary {
+  replayed: number
+  explained: number
+  skipped: number
+  followed: number
+  inspected: number
+}
 
 interface AboutSceneProps {
   fragments: RecordedFragment[]
+  pathSummary: PathSummary
   canReturn: boolean
   onReturn: () => void
   onRestart: () => void
@@ -17,6 +26,7 @@ const formatDuration = (milliseconds: number) => {
 
 export function AboutScene({
   fragments,
+  pathSummary,
   canReturn,
   onReturn,
   onRestart,
@@ -51,11 +61,11 @@ export function AboutScene({
   }
 
   return (
-    <main className="about-scene">
+    <main className="about-scene" aria-label={aboutCopy.aria}>
       <header className="about-header">
         <p className="about-kicker">声音档案 · 仅限当前标签页</p>
         <h1>{aboutCopy.title}</h1>
-        <p className="about-lead">{aboutCopy.lead}</p>
+        <p className="about-lead">{aboutCopy.concept}</p>
       </header>
 
       <div className="about-grid">
@@ -66,7 +76,7 @@ export function AboutScene({
           </div>
 
           {fragments.length === 0 ? (
-            <p className="archive-empty">{aboutCopy.empty}</p>
+            <p className="archive-empty">这次没有留下录音。沉默也是完整的。</p>
           ) : (
             <ol className="archive-list">
               {fragments.map((fragment, index) => (
@@ -76,7 +86,9 @@ export function AboutScene({
                   </span>
                   <div className="archive-copy">
                     <strong>{fragment.label}</strong>
-                    <span>{formatDuration(fragment.duration)} · 只存在于本页</span>
+                    <span>
+                      {fragment.source} · {formatDuration(fragment.duration)} · 只存在于本页
+                    </span>
                   </div>
                   <button
                     type="button"
@@ -94,6 +106,14 @@ export function AboutScene({
           <p className="archive-note">
             录音不上传、不写入存储。关闭或刷新标签页后，档案自动消失。
           </p>
+
+          <div className="path-summary" aria-label="这次体验的停留方式">
+            <span>重听 {pathSummary.replayed}</span>
+            <span>追问 {pathSummary.explained}</span>
+            <span>查看 {pathSummary.inspected}</span>
+            <span>跳过 {pathSummary.skipped}</span>
+            <span>跟读 {pathSummary.followed}</span>
+          </div>
         </section>
 
         <section className="about-notes" aria-labelledby="notes-title">
@@ -102,7 +122,14 @@ export function AboutScene({
           <details>
             <summary>家庭转写说明</summary>
             <p>{aboutCopy.transcript}</p>
-            <p className="placeholder-label">{placeholderNotice}</p>
+          </details>
+          <details>
+            <summary>声音采集说明</summary>
+            <p>{aboutCopy.collection}</p>
+          </details>
+          <details>
+            <summary>录音授权说明</summary>
+            <p>{aboutCopy.authorization}</p>
           </details>
           <details>
             <summary>麦克风与隐私</summary>
