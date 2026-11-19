@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { GLASS_TIMING } from '../config/glassTiming'
-import type { StoryScene } from '../types'
+import type { StoryScene, VoicePlaybackSnapshot } from '../types'
 
 type GlassChapter = StoryScene | 'transition' | 'ending'
 type FractureMode = 'voice' | 'timed'
@@ -17,6 +17,8 @@ interface SoundTextCanvasProps {
   fragmentBias?: number
   chapter?: GlassChapter
   fractureMode?: FractureMode
+  getVoicePlayback?: () => VoicePlaybackSnapshot
+  nextText?: string
   labelPrefix?: string
 }
 
@@ -51,6 +53,7 @@ interface GlassFragment {
   phase: number
   restoreRank: number
   startDelay: number
+  voiceDelay: number
   opacity: number
   scale: number
   drift: number
@@ -59,7 +62,7 @@ interface GlassFragment {
   width: number
   height: number
   sprite: HTMLCanvasElement
-  restoredSprite: HTMLCanvasElement
+  restoredSprite: HTMLCanvasElement | null
 }
 
 interface GlassGeometry {
@@ -70,6 +73,7 @@ interface GlassGeometry {
   fragments: GlassFragment[]
   seedCount: number
   glyphSurface: HTMLCanvasElement
+  glyphOutlineSurface: HTMLCanvasElement
   crackLayers: HTMLCanvasElement[]
   impacts: Point[]
 }
@@ -81,6 +85,49 @@ const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value))
 
 const easeOutCubic = (value: number) => 1 - (1 - value) ** 3
+
+const easeInOutCubic = (value: number) =>
+  value < 0.5
+    ? 4 * value * value * value
+    : 1 - (-2 * value + 2) ** 3 / 2
+
+function scheduleIdleWork(callback: IdleRequestCallback) {
+  if (typeof window.requestIdleCallback === 'function') {
+    return window.requestIdleCallback(callback, { timeout: 240 })
+  }
+  return window.setTimeout(
+    () =>
+      callback({
+        didTimeout: false,
+        timeRemaining: () => 0,
+      }),
+    80,
+  )
+}
+
+function cancelIdleWork(handle: number) {
+  if (typeof window.cancelIdleCallback === 'function') {
+    window.cancelIdleCallback(handle)
+  } else {
+    window.clearTimeout(handle)
+  }
+}
+
+function ensureRestoredSprite(
+  geometry: GlassGeometry,
+  fragment: GlassFragment,
+) {
+  if (!fragment.restoredSprite) {
+    fragment.restoredSprite = makeFragmentSprite(
+      geometry.glyphSurface,
+      fragment.bounds,
+      fragment.polygon,
+      geometry.dpr,
+      true,
+    )
+  }
+  return fragment.restoredSprite
+}
 
 function hashString(value: string) {
   let hash = 2166136261
@@ -296,6 +343,27 @@ function drawGlyphSurface(
   return surface
 }
 
+function drawGlyphOutlineSurface(
+  width: number,
+  height: number,
+  dpr: number,
+  chars: CharCell[],
+) {
+  const surface = createSurface(width, height, dpr)
+  const context = surface.getContext('2d')
+  if (!context) return surface
+  context.setTransform(dpr, 0, 0, dpr, 0, 0)
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.strokeStyle = '#F2F2EA'
+  context.lineWidth = 0.42
+  for (const char of chars) {
+    context.font = `${char.weight} ${char.size}px ${bodyFont}`
+    context.strokeText(char.char, char.x, char.y)
+  }
+  return surface
+}
+
 function makeFragmentSprite(
   glyphSurface: HTMLCanvasElement,
   bounds: FragmentBounds,
@@ -352,20 +420,6 @@ function makeFragmentSprite(
   context.globalCompositeOperation = 'source-over'
   return surface
 }
-function spriteHasGlyph(surface: HTMLCanvasElement) {
-  const context = surface.getContext('2d', { willReadFrequently: true })
-  if (!context) return false
-  const pixels = context.getImageData(0, 0, surface.width, surface.height).data
-  let visibleSamples = 0
-  for (let index = 3; index < pixels.length; index += 4) {
-    if (pixels[index] > 7) {
-      visibleSamples += 1
-      if (visibleSamples >= 1) return true
-    }
-  }
-  return false
-}
-
 function makeCrackLayers(
   glyphSurface: HTMLCanvasElement,
   width: number,
@@ -445,6 +499,103 @@ function makeCrackLayers(
     return surface
   })
 }
+const geometryCache = new Map<string, GlassGeometry>()
+const geometryCacheLimit = 3
+
+function geometryCacheKey(
+  width: number,
+  height: number,
+  text: string,
+  chapter: GlassChapter,
+  reducedMotion: boolean,
+) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+  return [
+    Math.round(width),
+    Math.round(height),
+    dpr.toFixed(2),
+    chapter,
+    reducedMotion ? 'reduced' : 'full',
+    text,
+  ].join('|')
+}
+
+function cacheGeometry(
+  key: string,
+  geometry: GlassGeometry | null,
+) {
+  if (!geometry) return
+  if (geometryCache.size >= geometryCacheLimit) {
+    const oldestKey = geometryCache.keys().next().value
+    if (oldestKey) geometryCache.delete(oldestKey)
+  }
+  geometryCache.set(key, geometry)
+}
+
+function prewarmGlassGeometry(
+  width: number,
+  height: number,
+  text: string,
+  chapter: GlassChapter,
+  reducedMotion: boolean,
+) {
+  const key = geometryCacheKey(width, height, text, chapter, reducedMotion)
+  if (geometryCache.has(key)) return
+  cacheGeometry(
+    key,
+    buildGeometry(width, height, text, chapter, reducedMotion),
+  )
+}
+
+interface GlassPrewarmProps {
+  width: number
+  height: number
+  text: string
+  chapter: GlassChapter
+  reducedMotion: boolean
+}
+
+export function GlassPrewarm({
+  width,
+  height,
+  text,
+  chapter,
+  reducedMotion,
+}: GlassPrewarmProps) {
+  useEffect(() => {
+    let cancelled = false
+    let idleHandle: number | null = null
+    let timeoutHandle: number | null = null
+
+    const build = () => {
+      if (cancelled) return
+      prewarmGlassGeometry(width, height, text, chapter, reducedMotion)
+    }
+    const schedule = () => {
+      if (cancelled) return
+      if (typeof window.requestIdleCallback === 'function') {
+        idleHandle = window.requestIdleCallback(build, { timeout: 1200 })
+      } else {
+        timeoutHandle = window.setTimeout(build, 350)
+      }
+    }
+
+    void document.fonts.ready.then(schedule)
+    return () => {
+      cancelled = true
+      if (
+        idleHandle !== null &&
+        typeof window.cancelIdleCallback === 'function'
+      ) {
+        window.cancelIdleCallback(idleHandle)
+      }
+      if (timeoutHandle !== null) window.clearTimeout(timeoutHandle)
+    }
+  }, [chapter, height, reducedMotion, text, width])
+
+  return null
+}
+
 function buildGeometry(
   width: number,
   height: number,
@@ -453,11 +604,12 @@ function buildGeometry(
   reducedMotion: boolean,
 ): GlassGeometry | null {
   if (width < 2 || height < 2 || !text) return null
-  const dpr = Math.min(window.devicePixelRatio || 1, 1.8)
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
   const chars = makeCharLayout(width, height, text)
   if (chars.length === 0) return null
   const textBounds = getTextBounds(chars, width, height)
   const glyphSurface = drawGlyphSurface(width, height, dpr, chars)
+  const glyphOutlineSurface = drawGlyphOutlineSurface(width, height, dpr, chars)
   const seed = hashString(`${text}|${chapter}|glass-v3`)
   const rng = mulberry32(seed)
   const isMobile = width < 660
@@ -584,8 +736,6 @@ function buildGeometry(
       height: Math.ceil(bottom - top + 4),
     }
     const baseSprite = makeFragmentSprite(glyphSurface, bounds, polygon, dpr, false)
-    if (!spriteHasGlyph(baseSprite)) continue
-    const restoredSprite = makeFragmentSprite(glyphSurface, bounds, polygon, dpr, true)
     const depth = rng() * 2 - 1
     const roll = rng()
     const distanceFactor = roll < 0.15 ? 0.05 + rng() * 0.1 : roll < 0.7 ? 0.25 + rng() * 0.35 : 0.65 + rng() * 0.45
@@ -630,6 +780,7 @@ function buildGeometry(
       phase: rng() * Math.PI * 2,
       restoreRank: rng(),
       startDelay: 20 + rng() * 50,
+      voiceDelay: rng() * 0.13,
       opacity: 0.7 + rng() * 0.24,
       scale: 1 + depth * 0.022,
       drift: 0.25 + rng() * 0.8,
@@ -638,7 +789,7 @@ function buildGeometry(
       width: bounds.width,
       height: bounds.height,
       sprite: baseSprite,
-      restoredSprite,
+      restoredSprite: null,
     })
   }
   if (fragments.length === 0) return null
@@ -652,6 +803,7 @@ function buildGeometry(
     fragments,
     seedCount,
     glyphSurface,
+    glyphOutlineSurface,
     crackLayers,
     impacts,
   }
@@ -668,6 +820,8 @@ export function SoundTextCanvas({
   fragmentBias = 0,
   chapter = 'call',
   fractureMode = 'timed',
+  getVoicePlayback,
+  nextText,
   labelPrefix = '声音文字场',
 }: SoundTextCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -682,6 +836,11 @@ export function SoundTextCanvas({
     debugTiming.crackDuration +
     debugTiming.burstDuration +
     debugTiming.settleDuration
+  const debugScrubMax = fractureMode === 'voice' ? 100 : debugBreakDuration
+  const debugMarks =
+    fractureMode === 'voice'
+      ? [0, 25, 50, 75, 100]
+      : [0, 200, 400, 600, debugBreakDuration]
   const propsRef = useRef({
     text,
     audioLevel,
@@ -692,6 +851,7 @@ export function SoundTextCanvas({
     fragmentBias,
     chapter,
     fractureMode,
+    getVoicePlayback,
   })
   const pulseRef = useRef(0)
   const fractureStartRef = useRef(0)
@@ -706,6 +866,8 @@ export function SoundTextCanvas({
   const recombineRef = useRef<{ start: number; fromPostHold: number } | null>(null)
   const stateKeyRef = useRef<string | null>(null)
   const replayTokenRef = useRef(replayToken)
+  const frozenRenderTimeRef = useRef<number | null>(null)
+  const frozenLevelRef = useRef(0)
 
   useEffect(() => {
     debugFreezeRef.current = debugFreeze
@@ -723,6 +885,7 @@ export function SoundTextCanvas({
       fragmentBias,
       chapter,
       fractureMode,
+      getVoicePlayback,
     }
   }, [
     text,
@@ -734,6 +897,7 @@ export function SoundTextCanvas({
     fragmentBias,
     chapter,
     fractureMode,
+    getVoicePlayback,
   ])
 
   useEffect(() => {
@@ -799,38 +963,128 @@ export function SoundTextCanvas({
     let animationFrame = 0
     let resizeFrame = 0
     let hiddenAt = 0
+    let nextPrewarmHandle: number | null = null
+    let restoredBuildHandle: number | null = null
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect()
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.8)
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
       canvas.width = Math.max(1, Math.round(rect.width * dpr))
       canvas.height = Math.max(1, Math.round(rect.height * dpr))
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
-      geometry = buildGeometry(
-        rect.width,
-        rect.height,
+      const width = Math.round(rect.width)
+      const height = Math.round(rect.height)
+      const cacheKey = geometryCacheKey(
+        width,
+        height,
         text,
         chapter,
         reducedMotion,
       )
+      const buildStarted = performance.now()
+      geometry =
+        geometryCache.get(cacheKey) ??
+        buildGeometry(width, height, text, chapter, reducedMotion)
+      if (geometry && !geometryCache.has(cacheKey)) {
+        cacheGeometry(cacheKey, geometry)
+      }
+      if (import.meta.env.DEV) {
+        canvas.dataset.glassBuildMs = (performance.now() - buildStarted).toFixed(1)
+      }
+      if (restoredBuildHandle !== null) {
+        cancelIdleWork(restoredBuildHandle)
+        restoredBuildHandle = null
+      }
+      if (nextPrewarmHandle !== null) {
+        cancelIdleWork(nextPrewarmHandle)
+        nextPrewarmHandle = null
+      }
+      if (nextText) {
+        nextPrewarmHandle = scheduleIdleWork(() => {
+          prewarmGlassGeometry(width, height, nextText, chapter, reducedMotion)
+        })
+      }
+      if (geometry && !reducedMotion) {
+        const activeGeometry = geometry
+        let cursor = 0
+        const fillRestoredSprites = () => {
+          if (geometry !== activeGeometry) return
+          const end = Math.min(cursor + 6, activeGeometry.fragments.length)
+          for (; cursor < end; cursor += 1) {
+            ensureRestoredSprite(activeGeometry, activeGeometry.fragments[cursor])
+          }
+          if (cursor < activeGeometry.fragments.length) {
+            restoredBuildHandle = scheduleIdleWork(fillRestoredSprites)
+          } else {
+            restoredBuildHandle = null
+          }
+        }
+        restoredBuildHandle = scheduleIdleWork(fillRestoredSprites)
+      }
     }
 
     const draw = () => {
       if (!geometry) return
       const current = propsRef.current
-      const { width, height, chars, fragments, glyphSurface, crackLayers, impacts } =
-        geometry
+      const {
+        width,
+        height,
+        fragments,
+        glyphSurface,
+        glyphOutlineSurface,
+        crackLayers,
+        impacts,
+      } = geometry
       context.clearRect(0, 0, width, height)
 
       const now = performance.now()
-      const time = debugFreezeRef.current ? 0 : now / 1000
-      const level = clamp(current.audioLevel, 0, 1)
+      const voiceSnapshot = current.getVoicePlayback?.() ?? null
+      const realVoiceClock = Boolean(
+        current.fractureMode === 'voice' &&
+          voiceSnapshot &&
+          (voiceSnapshot.kind === 'main' || voiceSnapshot.kind === 'supplement') &&
+          voiceSnapshot.durationSec > 0,
+      )
+      const debugValue = debugTimeRef.current
+      const debugVoiceProgress =
+        current.fractureMode === 'voice' && debugValue !== null
+          ? clamp(debugValue / 100, 0, 1)
+          : null
+      const mediaProgress = realVoiceClock
+        ? debugVoiceProgress ??
+          clamp(
+            (voiceSnapshot?.positionSec ?? 0) /
+              Math.max(0.001, voiceSnapshot?.durationSec ?? 1),
+            0,
+            1,
+          )
+        : null
+      const clockPaused = Boolean(
+        realVoiceClock &&
+          voiceSnapshot?.paused &&
+          !debugFreezeRef.current &&
+          debugVoiceProgress === null,
+      )
+      const rawLevel = clamp(current.audioLevel, 0, 1)
+      if (clockPaused) {
+        if (frozenRenderTimeRef.current === null) {
+          frozenRenderTimeRef.current = now / 1000
+          frozenLevelRef.current = rawLevel
+        }
+      } else {
+        frozenRenderTimeRef.current = null
+        frozenLevelRef.current = rawLevel
+      }
+      const time = debugFreezeRef.current
+        ? 0
+        : (frozenRenderTimeRef.current ?? now / 1000)
+      const level = clockPaused ? frozenLevelRef.current : rawLevel
       const voice = clamp(level * 1.6, 0, 1)
       const timing = current.reducedMotion
         ? GLASS_TIMING.reduced
         : GLASS_TIMING[current.chapter]
 
-      // Dynamic onset detection: fast attack, slower release, short debounce.
+      // Audio amplitude only adds local emphasis; media position owns the fracture.
       const onset = GLASS_TIMING.onset
       if (baselineLevelRef.current <= 0) {
         baselineLevelRef.current = Math.max(0.012, level * 0.35)
@@ -841,9 +1095,10 @@ export function SoundTextCanvas({
         baseline * onset.baselineMultiplier + 0.01,
       )
       const samples = onsetSamplesRef.current
-      const previousWindowPeak = samples.length
-        ? Math.max(...samples.map((sample) => sample.level))
-        : baseline
+      let previousWindowPeak = baseline
+      for (const sample of samples) {
+        previousWindowPeak = Math.max(previousWindowPeak, sample.level)
+      }
       const rising =
         level - baseline > dynamicThreshold &&
         level >= previousWindowPeak * 1.05
@@ -862,9 +1117,6 @@ export function SoundTextCanvas({
       if (validOnset) {
         lastOnsetAtRef.current = now
         onsetBoostRef.current = now + onset.boostDurationMs
-        if (fractureStartRef.current === 0) {
-          fractureStartRef.current = now
-        }
       }
       baselineLevelRef.current +=
         (level - baseline) * (level < baseline ? 0.14 : 0.045)
@@ -895,12 +1147,12 @@ export function SoundTextCanvas({
         }
       }
 
-      const debugValue = debugTimeRef.current
       if (debugValue !== null) {
         recombineActive = false
         recombinePostHold = null
       }
 
+      const useVoiceTimeline = mediaProgress !== null && !recombineActive
       let fractureElapsed = 0
       if (recombineActive && recombinePostHold !== null) {
         fractureElapsed = readingHoldRef.current + recombinePostHold
@@ -909,41 +1161,67 @@ export function SoundTextCanvas({
       } else if (fractureStartRef.current > 0) {
         fractureElapsed = Math.max(0, now - fractureStartRef.current)
       }
-      if (debugValue !== null) {
+      if (debugValue !== null && !useVoiceTimeline) {
         fractureElapsed = readingHoldRef.current + debugValue
       }
-      debugElapsedRef.current = Math.max(
-        0,
-        fractureElapsed - readingHoldRef.current,
-      )
 
       const postHold = recombineActive
         ? (recombinePostHold ?? 0)
-        : Math.max(0, fractureElapsed - readingHoldRef.current)
-      const impactPhase = clamp(postHold / timing.impactDuration, 0, 1)
-      const crackExpansion = clamp(
-        (postHold - timing.impactDuration) / timing.crackDuration,
-        0,
-        1,
-      )
-      const crackProgress =
-        impactPhase < 1
-          ? impactPhase * 0.22
-          : 0.22 + crackExpansion * 0.78
-      const separationStart = timing.impactDuration + timing.crackDuration
-      const separation = clamp(
-        (postHold - separationStart) / timing.burstDuration,
-        0,
-        1,
-      )
-      const settle = clamp(
-        (postHold - separationStart - timing.burstDuration) /
-          timing.settleDuration,
-        0,
-        1,
-      )
-      const shatter =
-        easeOutCubic(separation) * (0.64 + easeOutCubic(settle) * 0.36)
+        : useVoiceTimeline
+          ? debugElapsedRef.current
+          : Math.max(0, fractureElapsed - readingHoldRef.current)
+
+      let crackProgress = 0
+      let separation = 0
+      let settle = 0
+      let shatter = 0
+      if (useVoiceTimeline) {
+        const progress = mediaProgress ?? 0
+        const impact = clamp(progress / 0.1, 0, 1)
+        const crackExpansion = clamp((progress - 0.1) / 0.2, 0, 1)
+        crackProgress = impact * 0.18 + easeOutCubic(crackExpansion) * 0.82
+        separation =
+          progress < 0.55
+            ? easeInOutCubic(clamp((progress - 0.3) / 0.25, 0, 1)) * 0.35
+            : 0.35 +
+              easeOutCubic(clamp((progress - 0.55) / 0.3, 0, 1)) * 0.65
+        settle = clamp((progress - 0.85) / 0.15, 0, 1)
+        shatter = separation * (0.82 + easeOutCubic(settle) * 0.18)
+        debugElapsedRef.current = progress * debugBreakDuration
+      } else {
+        const impactPhase = clamp(postHold / timing.impactDuration, 0, 1)
+        const crackExpansion = clamp(
+          (postHold - timing.impactDuration) / timing.crackDuration,
+          0,
+          1,
+        )
+        crackProgress =
+          impactPhase < 1
+            ? impactPhase * 0.22
+            : 0.22 + crackExpansion * 0.78
+        separation = clamp(
+          (postHold - timing.impactDuration - timing.crackDuration) /
+            timing.burstDuration,
+          0,
+          1,
+        )
+        settle = clamp(
+          (postHold -
+            timing.impactDuration -
+            timing.crackDuration -
+            timing.burstDuration) /
+            timing.settleDuration,
+          0,
+          1,
+        )
+        shatter =
+          easeOutCubic(separation) * (0.64 + easeOutCubic(settle) * 0.36)
+        debugElapsedRef.current = Math.max(
+          0,
+          fractureElapsed - readingHoldRef.current,
+        )
+      }
+
       const motionFactor =
         clamp(shatter + current.fragmentBias, 0, 1.25) * timing.motionScale
       const restorationEnergy = clamp(
@@ -952,31 +1230,49 @@ export function SoundTextCanvas({
         0.88,
       )
       const showFragments =
+        useVoiceTimeline ||
         recombineActive ||
         postHold > 0 ||
         motionFactor > 0.02 ||
         restorationEnergy > 0.05
       const fragmentReveal = showFragments
-        ? recombineActive
-          ? 1
-          : clamp(
-              Math.max(
-                postHold,
-                (motionFactor + restorationEnergy) * 36,
-              ) / 36,
-              0,
-              1,
-            )
+        ? useVoiceTimeline
+          ? clamp((mediaProgress ?? 0) / 0.015, 0, 1)
+          : recombineActive
+            ? 1
+            : clamp(
+                Math.max(
+                  postHold,
+                  (motionFactor + restorationEnergy) * 36,
+                ) / 36,
+                0,
+                1,
+              )
         : 0
       const directGlyphAlpha = showFragments ? (1 - fragmentReveal) * 0.92 : 0.92
-      const crackVisibility = 1 - clamp(separation * 0.78 + settle * 0.16, 0, 0.94)
+      const crackVisibility =
+        1 - clamp(separation * 0.78 + settle * 0.16, 0, 0.94)
       const stressJitter =
-        crackProgress * (0.5 + voice * 1.8) * (current.reducedMotion ? 0.25 : 1)
-      lastPostHoldRef.current = postHold
+        crackProgress *
+        (0.5 + voice * 1.8) *
+        (current.reducedMotion ? 0.25 : 1) *
+        (useVoiceTimeline ? 1 - (mediaProgress ?? 0) * 0.85 : 1)
+      lastPostHoldRef.current = useVoiceTimeline
+        ? debugBreakDuration * (mediaProgress ?? 0)
+        : postHold
 
       if (import.meta.env.DEV) {
-        const stage =
-          fractureElapsed < readingHoldRef.current
+        const stage = useVoiceTimeline
+          ? (mediaProgress ?? 0) < 0.1
+            ? 'stressed'
+            : (mediaProgress ?? 0) < 0.3
+              ? 'cracked'
+              : (mediaProgress ?? 0) < 0.55
+                ? 'separating'
+                : (mediaProgress ?? 0) < 0.85
+                  ? 'burst'
+                  : 'suspended'
+          : fractureElapsed < readingHoldRef.current
             ? 'intact'
             : separation === 0
               ? 'cracked'
@@ -984,7 +1280,16 @@ export function SoundTextCanvas({
                 ? 'burst'
                 : 'suspended'
         canvas.dataset.glassStage = stage
-        canvas.dataset.glassElapsed = Math.round(fractureElapsed).toString()
+        canvas.dataset.glassElapsed = Math.round(
+          useVoiceTimeline
+            ? (mediaProgress ?? 0) * debugBreakDuration
+            : fractureElapsed,
+        ).toString()
+        canvas.dataset.glassProgress = mediaProgress?.toFixed(3) ?? ''
+        canvas.dataset.glassMediaTime = (voiceSnapshot?.positionSec ?? 0).toFixed(3)
+        canvas.dataset.glassDuration = (voiceSnapshot?.durationSec ?? 0).toFixed(3)
+        canvas.dataset.glassClockPaused = String(clockPaused)
+        canvas.dataset.glassPlaybackId = String(voiceSnapshot?.id ?? 0)
         canvas.dataset.glassOnset = onsetBoost.toFixed(2)
         canvas.dataset.glassFragments = String(fragments.length)
         canvas.dataset.glassSeeds = String(geometry.seedCount)
@@ -992,18 +1297,13 @@ export function SoundTextCanvas({
       }
 
       if (directGlyphAlpha > 0.001) {
-        context.textAlign = 'center'
-        context.textBaseline = 'middle'
-        context.fillStyle = '#A84432'
+        const jitterX = Math.sin(time * 1.15) * stressJitter
+        const jitterY = Math.cos(time * 1.32) * stressJitter * 0.55
+        context.save()
         context.globalAlpha = directGlyphAlpha
-        for (const char of chars) {
-          const jitterX =
-            Math.sin(time * 1.15 + char.x * 0.025) * stressJitter
-          const jitterY =
-            Math.cos(time * 1.32 + char.y * 0.03) * stressJitter * 0.55
-          context.font = `${char.weight} ${char.size}px ${bodyFont}`
-          context.fillText(char.char, char.x + jitterX, char.y + jitterY)
-        }
+        context.translate(jitterX, jitterY)
+        context.drawImage(glyphSurface, 0, 0, width, height)
+        context.restore()
         context.globalAlpha = 1
       }
 
@@ -1021,14 +1321,7 @@ export function SoundTextCanvas({
           0.035,
           0.26,
         )
-        context.strokeStyle = '#F2F2EA'
-        context.lineWidth = 0.42
-        context.textAlign = 'center'
-        context.textBaseline = 'middle'
-        for (const char of chars) {
-          context.font = `${char.weight} ${char.size}px ${bodyFont}`
-          context.strokeText(char.char, char.x, char.y)
-        }
+        context.drawImage(glyphOutlineSurface, 0, 0, width, height)
         context.globalAlpha = 1
       }
 
@@ -1040,17 +1333,19 @@ export function SoundTextCanvas({
       for (let index = 0; index < crackLayers.length; index += 1) {
         const alpha = crackAlphas[index] ?? 0
         if (alpha <= 0 || crackVisibility <= 0.01) continue
-        context.globalAlpha = alpha * 0.78 * crackVisibility
+        context.globalAlpha = alpha * 0.78 * crackVisibility * (0.92 + voice * 0.08)
         context.drawImage(crackLayers[index], 0, 0, width, height)
       }
       context.globalAlpha = 1
 
-      const flashStart = readingHoldRef.current
-      if (
-        fractureElapsed >= flashStart &&
-        fractureElapsed < flashStart + timing.impactDuration
-      ) {
-        const flash = 1 - (fractureElapsed - flashStart) / timing.impactDuration
+      const flash = useVoiceTimeline
+        ? clamp(1 - (mediaProgress ?? 0) / 0.1, 0, 1)
+        : fractureElapsed >= readingHoldRef.current &&
+            fractureElapsed < readingHoldRef.current + timing.impactDuration
+          ? 1 -
+            (fractureElapsed - readingHoldRef.current) / timing.impactDuration
+          : 0
+      if (flash > 0) {
         for (const impact of impacts) {
           const gradient = context.createRadialGradient(
             impact.x,
@@ -1070,27 +1365,47 @@ export function SoundTextCanvas({
 
       if (showFragments && fragmentReveal > 0.001) {
         for (const fragment of fragments) {
-          const localPostHold = recombineActive
-            ? postHold
-            : Math.max(0, postHold - fragment.startDelay)
-          const localSeparation = recombineActive
-            ? separation
-            : clamp(
-                (localPostHold - separationStart) / timing.burstDuration,
-                0,
-                1,
-              )
-          const localSettle = recombineActive
-            ? settle
-            : clamp(
-                (localPostHold - separationStart - timing.burstDuration) /
-                  timing.settleDuration,
-                0,
-                1,
-              )
-          const localBreak =
-            easeOutCubic(localSeparation) *
-            (0.64 + easeOutCubic(localSettle) * 0.36)
+          let localBreak = 0
+          let localSettle = 0
+          if (recombineActive) {
+            localSettle = settle
+            localBreak =
+              easeOutCubic(separation) *
+              (0.64 + easeOutCubic(localSettle) * 0.36)
+          } else if (useVoiceTimeline) {
+            const progress = mediaProgress ?? 0
+            const releaseStart = 0.3 + fragment.voiceDelay
+            const localProgress = clamp(
+              (progress - releaseStart) / Math.max(0.001, 1 - releaseStart),
+              0,
+              1,
+            )
+            localBreak = easeOutCubic(localProgress)
+            localSettle = clamp((progress - 0.85) / 0.15, 0, 1)
+          } else {
+            const localPostHold = Math.max(
+              0,
+              postHold - fragment.startDelay,
+            )
+            const localSeparation = clamp(
+              (localPostHold - timing.impactDuration - timing.crackDuration) /
+                timing.burstDuration,
+              0,
+              1,
+            )
+            localSettle = clamp(
+              (localPostHold -
+                timing.impactDuration -
+                timing.crackDuration -
+                timing.burstDuration) /
+                timing.settleDuration,
+              0,
+              1,
+            )
+            localBreak =
+              easeOutCubic(localSeparation) *
+              (0.64 + easeOutCubic(localSettle) * 0.36)
+          }
           const localMotionFactor = recombineActive
             ? motionFactor
             : clamp(localBreak + current.fragmentBias, 0, 1.25) *
@@ -1099,30 +1414,36 @@ export function SoundTextCanvas({
           const restorePull = restoredActive
             ? clamp(restorationEnergy * 1.16, 0, 1)
             : clamp(restorationEnergy * 0.14, 0, 0.2)
+          const voiceDriftFade = useVoiceTimeline ? 1 - localSettle : 1
           const suspend =
             localSettle > 0
               ? Math.sin(time * 0.38 + fragment.phase) *
                 fragment.drift *
-                (current.reducedMotion ? 0.2 : 1.2)
+                (current.reducedMotion ? 0.2 : 1.2) *
+                voiceDriftFade
               : 0
           const lift =
             localSettle > 0
               ? Math.cos(time * 0.31 + fragment.phase * 1.4) *
                 fragment.drift *
-                (current.reducedMotion ? 0.18 : 0.85)
+                (current.reducedMotion ? 0.18 : 0.85) *
+                voiceDriftFade
               : 0
           const onsetKick =
-            onsetBoost * (0.035 + (fragment.depth + 1) * 0.025)
+            onsetBoost *
+            (0.035 + (fragment.depth + 1) * 0.025) *
+            (useVoiceTimeline ? 1 - (mediaProgress ?? 0) : 1)
           const localMotion =
             (localMotionFactor + onsetKick) *
-            (1 - restorePull * 0.92) *
-            (0.92 + voice * 0.13)
+            (1 - restorePull * 0.92)
           const dx = (fragment.motionX * localMotion + suspend) * (1 - restorePull)
           const dy = (fragment.motionY * localMotion + lift) * (1 - restorePull)
           const rotation =
             fragment.rotation * localMotion * (1 - restorePull * 0.9) +
             (localSettle > 0 && !restoredActive
-              ? Math.sin(time * 0.26 + fragment.phase) * 0.012
+              ? Math.sin(time * 0.26 + fragment.phase) *
+                0.012 *
+                voiceDriftFade
               : 0)
           const scale =
             fragment.scale * (1 + localMotion * (fragment.depth + 1) * 0.012)
@@ -1132,7 +1453,7 @@ export function SoundTextCanvas({
             (0.88 + (fragment.depth + 1) * 0.06) *
             (restoredActive ? 1 : 1 - restorationEnergy * 0.18)
           const sprite = restoredActive
-            ? fragment.restoredSprite
+            ? ensureRestoredSprite(geometry, fragment)
             : fragment.sprite
 
           context.save()
@@ -1153,7 +1474,6 @@ export function SoundTextCanvas({
           context.restore()
         }
       }
-      context.filter = 'none'
       context.globalAlpha = 1
     }
 
@@ -1162,7 +1482,14 @@ export function SoundTextCanvas({
         animationFrame = 0
         return
       }
-      draw()
+      const snapshot = propsRef.current.getVoicePlayback?.()
+      const clockPaused =
+        propsRef.current.fractureMode === 'voice' &&
+        snapshot?.paused &&
+        (snapshot.kind === 'main' || snapshot.kind === 'supplement')
+      const restorationActive =
+        propsRef.current.restoration > 0.01 || propsRef.current.restored
+      if (!clockPaused || restorationActive) draw()
       animationFrame = requestAnimationFrame(loop)
     }
     const handleVisibility = () => {
@@ -1209,22 +1536,29 @@ export function SoundTextCanvas({
       document.removeEventListener('visibilitychange', handleVisibility)
       cancelAnimationFrame(animationFrame)
       cancelAnimationFrame(resizeFrame)
+      if (restoredBuildHandle !== null) cancelIdleWork(restoredBuildHandle)
+      if (nextPrewarmHandle !== null) cancelIdleWork(nextPrewarmHandle)
       geometry = null
     }
-  }, [chapter, reducedMotion, text])
+  }, [chapter, debugBreakDuration, nextText, reducedMotion, text])
 
   const pauseDebugTimeline = () => {
-    setDebugTime(Math.round(debugElapsedRef.current))
+    if (propsRef.current.fractureMode === 'voice') {
+      setDebugTime(
+        Math.round(
+          (debugElapsedRef.current / Math.max(1, debugBreakDuration)) * 100,
+        ),
+      )
+    } else {
+      setDebugTime(Math.round(debugElapsedRef.current))
+    }
     setDebugFreeze(true)
   }
 
   const resumeDebugTimeline = () => {
-    const now = performance.now()
-    const breakTime = debugTime
-    if (propsRef.current.fractureMode === 'voice') {
-      fractureStartRef.current = now - (readingHoldRef.current + breakTime)
-    } else {
-      pulseRef.current = now - (readingHoldRef.current + breakTime)
+    if (propsRef.current.fractureMode === 'timed') {
+      pulseRef.current =
+        performance.now() - (readingHoldRef.current + debugTime)
     }
     setDebugFreeze(false)
   }
@@ -1258,20 +1592,24 @@ export function SoundTextCanvas({
             <input
               type="range"
               min="0"
-              max={debugBreakDuration}
-              step="10"
+              max={debugScrubMax}
+              step={fractureMode === 'voice' ? 1 : 10}
               value={debugTime}
               onChange={(event) => selectDebugTime(Number(event.target.value))}
               aria-label="玻璃破碎时间进度"
             />
             <div className="glass-debug-panel__marks">
-              {[0, 200, 400, 600, debugBreakDuration].map((value) => (
+              {debugMarks.map((value) => (
                 <button key={value} type="button" onClick={() => selectDebugTime(value)}>
-                  {value}ms
+                  {fractureMode === 'voice' ? `${value}%` : `${value}ms`}
                 </button>
               ))}
             </div>
-            <p>0ms 完整字形 · 200ms 裂纹 · 400ms 分离 · 600ms 弹开 · 800ms 悬停</p>
+            <p>
+              {fractureMode === 'voice'
+                ? '音频进度：0% 完整 · 25% 裂纹 · 50% 断裂 · 75% 分离 · 100% 悬停'
+                : '0ms 完整字形 · 200ms 裂纹 · 400ms 分离 · 600ms 弹开 · 800ms 悬停'}
+            </p>
           </div>
         </details>
       )}

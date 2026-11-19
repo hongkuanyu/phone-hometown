@@ -1,7 +1,24 @@
 import { GLASS_TIMING } from '../config/glassTiming'
-import type { AmbientMode, AudioPlaybackResult, StoryTerm } from '../types'
+import type {
+  AmbientMode,
+  AudioPlaybackResult,
+  StoryTerm,
+  VoicePlaybackKind,
+  VoicePlaybackSnapshot,
+} from '../types'
 
 type AudioContextConstructor = typeof AudioContext
+
+interface ActiveVoicePlayback {
+  token: number
+  kind: Exclude<VoicePlaybackKind, 'none'>
+  startedAt: number
+  duration: number
+  rate: number
+  frozenPosition: number | null
+  ended: boolean
+  sourceNode: AudioBufferSourceNode | null
+}
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value))
@@ -31,8 +48,20 @@ export class NarrativeAudio {
   private muted = false
   private paused = false
   private hidden = false
+  private interactionPaused = false
   private voiceToken = 0
   private currentUtterance: SpeechSynthesisUtterance | null = null
+  private activeVoicePlayback: ActiveVoicePlayback | null = null
+  private readonly voiceSnapshot: VoicePlaybackSnapshot = {
+    id: 0,
+    kind: 'none',
+    active: false,
+    ended: false,
+    paused: false,
+    positionSec: 0,
+    durationSec: 0,
+    rate: 1,
+  }
 
   get supported() {
     return Boolean(
@@ -175,6 +204,83 @@ export class NarrativeAudio {
     this.smoothedLevel += (target - this.smoothedLevel) * blend
     this.lastLevelAt = now
     return clamp(this.smoothedLevel * 3.2, 0, 1)
+  }
+
+  private getPlaybackPosition(playback: ActiveVoicePlayback) {
+    if (playback.ended) return playback.duration
+    if (playback.frozenPosition !== null) return playback.frozenPosition
+    if (!this.context) return 0
+    return clamp(
+      (this.context.currentTime - playback.startedAt) * playback.rate,
+      0,
+      playback.duration,
+    )
+  }
+
+  private freezeVoiceClock() {
+    const playback = this.activeVoicePlayback
+    if (!playback || playback.ended || playback.frozenPosition !== null) return
+    playback.frozenPosition = this.getPlaybackPosition(playback)
+  }
+
+  private reanchorVoiceClock() {
+    const playback = this.activeVoicePlayback
+    if (!playback || playback.ended || !this.context) return
+    const position = this.getPlaybackPosition(playback)
+    if (playback.frozenPosition === null) return
+    playback.startedAt = this.context.currentTime - position / playback.rate
+    playback.frozenPosition = null
+  }
+
+  /** Media-time snapshot for the currently audible mother voice. */
+  getVoicePlayback(): VoicePlaybackSnapshot {
+    const playback = this.activeVoicePlayback
+    if (!playback) {
+      this.voiceSnapshot.id = this.voiceToken
+      this.voiceSnapshot.kind = 'none'
+      this.voiceSnapshot.active = false
+      this.voiceSnapshot.ended = false
+      this.voiceSnapshot.paused = false
+      this.voiceSnapshot.positionSec = 0
+      this.voiceSnapshot.durationSec = 0
+      this.voiceSnapshot.rate = 1
+      return this.voiceSnapshot
+    }
+
+    const position = this.getPlaybackPosition(playback)
+    this.voiceSnapshot.id = playback.token
+    this.voiceSnapshot.kind = playback.kind
+    this.voiceSnapshot.active = !playback.ended && position < playback.duration
+    this.voiceSnapshot.ended = playback.ended
+    this.voiceSnapshot.paused =
+      this.paused ||
+      this.hidden ||
+      this.interactionPaused ||
+      Boolean(this.context && this.context.state !== 'running')
+    this.voiceSnapshot.positionSec = position
+    this.voiceSnapshot.durationSec = playback.duration
+    this.voiceSnapshot.rate = playback.rate
+    return this.voiceSnapshot
+  }
+
+  setInteractionPaused(paused: boolean) {
+    if (this.interactionPaused === paused) return
+    if (paused) this.freezeVoiceClock()
+    else this.reanchorVoiceClock()
+    this.interactionPaused = paused
+    this.syncContextState()
+  }
+
+  setVoicePlaybackRate(rate: number) {
+    const playback = this.activeVoicePlayback
+    if (!playback || playback.ended || !this.context) return
+    const nextRate = clamp(rate, 0.5, 1.5)
+    const position = this.getPlaybackPosition(playback)
+    playback.sourceNode?.playbackRate.setValueAtTime(nextRate, this.context.currentTime)
+    playback.rate = nextRate
+    if (playback.frozenPosition === null) {
+      playback.startedAt = this.context.currentTime - position / nextRate
+    }
   }
 
   setAmbient(mode: AmbientMode, source?: string) {
@@ -378,7 +484,11 @@ export class NarrativeAudio {
     }, 900)
     this.ambientGain = null
   }
-  async playTerm(term: StoryTerm, rate = 1): Promise<AudioPlaybackResult> {
+  async playTerm(
+    term: StoryTerm,
+    rate = 1,
+    startDelaySec = 0,
+  ): Promise<AudioPlaybackResult> {
     if (!this.context || this.muted || this.paused || this.hidden) {
       return { kind: 'placeholder', durationMs: 0 }
     }
@@ -387,7 +497,13 @@ export class NarrativeAudio {
 
     if (term.audioSrc) {
       try {
-        const duration = await this.playAudioSource(term.audioSrc, rate, token)
+        const duration = await this.playAudioSource(
+          term.audioSrc,
+          rate,
+          token,
+          'main',
+          startDelaySec,
+        )
         return {
           kind: 'recording',
           durationMs: (duration / Math.max(0.1, rate)) * 1000,
@@ -397,12 +513,20 @@ export class NarrativeAudio {
       }
     }
 
+    this.setPlaceholderPlayback(
+      'placeholder',
+      clamp((term.spokenText.length * 0.3) / Math.max(0.7, rate), 2.4, 8.8),
+    )
     this.playBreathPulse(term.spokenText, rate)
     this.speakPlaceholder(term.spokenText, rate * 0.95)
     return { kind: 'placeholder', durationMs: 0 }
   }
 
-  async playSupplement(term: StoryTerm, rate = 1): Promise<AudioPlaybackResult> {
+  async playSupplement(
+    term: StoryTerm,
+    rate = 1,
+    startDelaySec = 0,
+  ): Promise<AudioPlaybackResult> {
     if (!this.context || this.muted || this.paused || this.hidden) {
       return { kind: 'placeholder', durationMs: 0 }
     }
@@ -415,6 +539,8 @@ export class NarrativeAudio {
           term.supplementAudioSrc,
           rate,
           token,
+          'supplement',
+          startDelaySec,
         )
         return {
           kind: 'recording',
@@ -428,12 +554,39 @@ export class NarrativeAudio {
       }
     }
 
+    this.setPlaceholderPlayback(
+      'placeholder',
+      clamp((term.supplement.length * 0.26) / Math.max(0.7, rate), 3.2, 12),
+    )
     this.playBreathPulse(term.supplement, rate, 0.24)
     this.speakPlaceholder(term.supplement, rate, 0.52)
     return { kind: 'placeholder', durationMs: 0 }
   }
 
-  private async playAudioSource(source: string, rate: number, token: number) {
+  private setPlaceholderPlayback(
+    kind: Exclude<VoicePlaybackKind, 'none' | 'main' | 'supplement'>,
+    duration: number,
+  ) {
+    if (!this.context) return
+    this.activeVoicePlayback = {
+      token: this.voiceToken,
+      kind,
+      startedAt: this.context.currentTime,
+      duration,
+      rate: 1,
+      frozenPosition: null,
+      ended: false,
+      sourceNode: null,
+    }
+  }
+
+  private async playAudioSource(
+    source: string,
+    rate: number,
+    token: number,
+    kind: Exclude<VoicePlaybackKind, 'none' | 'placeholder'>,
+    startDelaySec = 0,
+  ) {
     const context = this.ensureContext()
     const response = await fetch(new URL(source, document.baseURI))
     if (!response.ok) throw new Error(`Term audio ${response.status}`)
@@ -451,10 +604,26 @@ export class NarrativeAudio {
     sourceNode.connect(filter)
     filter.connect(gain)
     gain.connect(this.voiceGain!)
-    sourceNode.start()
+
+    const playback: ActiveVoicePlayback = {
+      token,
+      kind,
+      startedAt: context.currentTime + Math.max(0, startDelaySec),
+      duration: buffer.duration,
+      rate,
+      frozenPosition: null,
+      ended: false,
+      sourceNode,
+    }
+    this.activeVoicePlayback = playback
+    sourceNode.start(playback.startedAt)
     this.activeVoiceSources.push(sourceNode)
     sourceNode.onended = () => {
       this.activeVoiceSources = this.activeVoiceSources.filter((node) => node !== sourceNode)
+      if (this.activeVoicePlayback === playback) {
+        playback.ended = true
+        playback.frozenPosition = playback.duration
+      }
     }
     return buffer.duration
   }
@@ -526,6 +695,7 @@ export class NarrativeAudio {
 
   stopVoice() {
     this.voiceToken += 1
+    this.activeVoicePlayback = null
     this.activeVoiceSources.forEach((source) => {
       try {
         source.stop()
@@ -549,6 +719,8 @@ export class NarrativeAudio {
   }
 
   setPaused(paused: boolean) {
+    if (paused) this.freezeVoiceClock()
+    else this.reanchorVoiceClock()
     this.paused = paused
     if ('speechSynthesis' in window) {
       if (paused) window.speechSynthesis.pause()
@@ -558,6 +730,8 @@ export class NarrativeAudio {
   }
 
   pauseForVisibility(hidden: boolean) {
+    if (hidden) this.freezeVoiceClock()
+    else this.reanchorVoiceClock()
     this.hidden = hidden
     if ('speechSynthesis' in window) {
       if (hidden) window.speechSynthesis.pause()
@@ -568,11 +742,15 @@ export class NarrativeAudio {
 
   private syncContextState() {
     if (!this.context) return
-    if ((this.paused || this.hidden) && this.context.state === 'running') {
+    if (
+      (this.paused || this.hidden || this.interactionPaused) &&
+      this.context.state === 'running'
+    ) {
       void this.context.suspend()
     } else if (
       !this.paused &&
       !this.hidden &&
+      !this.interactionPaused &&
       this.context.state === 'suspended'
     ) {
       void this.context.resume()

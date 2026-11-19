@@ -14,9 +14,10 @@ export interface GlassTimingProfile {
 }
 
 /**
- * One source of truth for the glass-fracture timeline.
- * All values are milliseconds. The sum of the four break phases is the
- * duration from the first crack to the stable suspended result.
+ * Timing for transition, ending and audio-missing demo timelines.
+ * Voice scenes ignore the fixed phase durations and use the active
+ * mother recording's media position as the master clock. `motionScale`
+ * still applies to voice-driven fragment distance.
  */
 export const GLASS_TIMING = {
   call: {

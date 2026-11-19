@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import { NarrativeAudio } from './audio/NarrativeAudio'
+import { GLASS_TIMING } from './config/glassTiming'
 import { AboutScene } from './components/AboutScene'
 import { EndingScene } from './components/EndingScene'
 import { IntroScene } from './components/IntroScene'
@@ -220,6 +221,24 @@ function App() {
     setRestoredTermIds((previous) => addUnique(previous, termId))
   }, [])
 
+  const getVoicePlayback = useCallback(
+    () => audio.getVoicePlayback(),
+    [audio],
+  )
+
+  const changePlaybackRate = useCallback(
+    (rate: PlaybackRate) => {
+      setPlaybackRate(rate)
+      audio.setVoicePlaybackRate(rate)
+    },
+    [audio],
+  )
+
+  const setFollowListening = useCallback(
+    (active: boolean) => audio.setInteractionPaused(active),
+    [audio],
+  )
+
   const playTerm = useCallback(
     async (
       term: StoryTerm,
@@ -233,7 +252,11 @@ function App() {
         audio.setPaused(false)
       }
       duckTemporarily('voice', 7600)
-      const result = await audio.playTerm(term, rate)
+      const result = await audio.playTerm(
+        term,
+        rate,
+        manual ? GLASS_TIMING.replay.recombineMs / 1000 : 0,
+      )
       if (result.durationMs > 0) {
         duckTemporarily('voice', result.durationMs + 450)
       }
@@ -253,6 +276,7 @@ function App() {
       const result = await audio.playSupplement(
         term,
         (term.voiceRate ?? 1) * playbackRate,
+        GLASS_TIMING.replay.recombineMs / 1000,
       )
       if (result.durationMs > 0) {
         duckTemporarily('explain', result.durationMs + 450)
@@ -417,7 +441,7 @@ function App() {
     onToggleAudio: toggleAudio,
     onTogglePause: togglePause,
     onToggleSubtitles: toggleSubtitles,
-    onSetPlaybackRate: setPlaybackRate,
+    onSetPlaybackRate: changePlaybackRate,
     onSetAmbientVolume: setAmbientVolume,
     onSetVoiceVolume: setVoiceVolume,
     onOpenAbout: openAbout,
@@ -445,6 +469,8 @@ function App() {
           restoredTermIds={restoredTermIds}
           skippedTermIds={skippedTermIds}
           explainedTermIds={explainedTermIds}
+          getVoicePlayback={getVoicePlayback}
+          onFollowActiveChange={setFollowListening}
           onRestartChapter={restartChapter}
           onAdvance={advance}
           onPlayTerm={playTerm}

@@ -38,6 +38,19 @@ export interface AudioPlaybackResult {
   durationMs: number
 }
 
+export type VoicePlaybackKind = 'none' | 'main' | 'supplement' | 'placeholder'
+
+export interface VoicePlaybackSnapshot {
+  id: number
+  kind: VoicePlaybackKind
+  active: boolean
+  ended: boolean
+  paused: boolean
+  positionSec: number
+  durationSec: number
+  rate: number
+}
+
 export interface StoryChapter {
   scene: StoryScene
   eyebrow: string

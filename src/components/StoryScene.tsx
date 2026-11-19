@@ -6,6 +6,7 @@ import type {
   PlaybackRate,
   StoryChapter,
   StoryTerm,
+  VoicePlaybackSnapshot,
 } from '../types'
 import { useMicRecorder } from '../hooks/useMicRecorder'
 import type { VoiceClip } from '../hooks/useMicRecorder'
@@ -29,6 +30,8 @@ interface StorySceneProps {
   playbackRate: PlaybackRate
   ambientVolume: number
   voiceVolume: number
+  getVoicePlayback: () => VoicePlaybackSnapshot
+  onFollowActiveChange: (active: boolean) => void
   onToggleAudio: () => void
   onTogglePause: () => void
   onToggleSubtitles: () => void
@@ -76,6 +79,8 @@ export function StoryScene({
   playbackRate,
   ambientVolume,
   voiceVolume,
+  getVoicePlayback,
+  onFollowActiveChange,
   onToggleAudio,
   onTogglePause,
   onToggleSubtitles,
@@ -101,6 +106,12 @@ export function StoryScene({
   const [speakingTick, setSpeakingTick] = useState(0)
   const [departingTermId, setDepartingTermId] = useState<string | null>(null)
   const [quickCapture, setQuickCapture] = useState(false)
+  const [playbackInfo, setPlaybackInfo] = useState<{
+    termId: string
+    kind: 'recording' | 'placeholder'
+  } | null>(null)
+  const playbackKind =
+    playbackInfo?.termId === term.id ? playbackInfo.kind : null
   const termRef = useRef(term)
   const playedRef = useRef('')
   const exitTimerRef = useRef<number | null>(null)
@@ -145,6 +156,9 @@ export function StoryScene({
     markSpeaking(6800 / playbackRate)
     void onPlayTerm(term, (term.voiceRate ?? 1) * playbackRate, false).then(
       (result) => {
+        if (requestId === playbackRequestRef.current) {
+          setPlaybackInfo({ termId: term.id, kind: result.kind })
+        }
         if (
           requestId === playbackRequestRef.current &&
           result.durationMs > 0
@@ -159,8 +173,9 @@ export function StoryScene({
   useEffect(() => {
     return () => {
       if (exitTimerRef.current !== null) window.clearTimeout(exitTimerRef.current)
+      onFollowActiveChange(false)
     }
-  }, [])
+  }, [onFollowActiveChange])
 
   // Space is a no-mic rhythm alternative and never asks for permission.
   useEffect(() => {
@@ -174,6 +189,7 @@ export function StoryScene({
         return
       }
       event.preventDefault()
+      onFollowActiveChange(true)
       void mic.startHold()
     }
     const handleKeyUp = (event: KeyboardEvent) => {
@@ -183,6 +199,7 @@ export function StoryScene({
         onRestore(termRef.current.id)
         onChoice({ scene: chapter.scene, type: 'follow', termId: termRef.current.id })
       }
+      onFollowActiveChange(false)
       mic.stopHold()
     }
 
@@ -192,7 +209,7 @@ export function StoryScene({
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [chapter.scene, isCooling, mic, onChoice, onRestore])
+  }, [chapter.scene, isCooling, mic, onChoice, onFollowActiveChange, onRestore])
   const replay = () => {
     onChoice({ scene: chapter.scene, type: 'replay', termId: term.id })
     setPulse((value) => value + 1)
@@ -200,6 +217,9 @@ export function StoryScene({
     markSpeaking(6800 / playbackRate)
     void onPlayTerm(term, (term.voiceRate ?? 1) * playbackRate, true).then(
       (result) => {
+        if (requestId === playbackRequestRef.current) {
+          setPlaybackInfo({ termId: term.id, kind: result.kind })
+        }
         if (
           requestId === playbackRequestRef.current &&
           result.durationMs > 0
@@ -217,6 +237,9 @@ export function StoryScene({
     markSpeaking(9000 / playbackRate)
     onRestore(term.id)
     void onExplain(term).then((result) => {
+      if (requestId === playbackRequestRef.current) {
+        setPlaybackInfo({ termId: term.id, kind: result.kind })
+      }
       if (
         requestId === playbackRequestRef.current &&
         result.durationMs > 0
@@ -250,12 +273,14 @@ export function StoryScene({
   }
 
   const beginFollow = () => {
+    onFollowActiveChange(true)
     void mic.startHold()
   }
 
   const startQuickCapture = () => {
     if (mic.isActive) return
     setQuickCapture(true)
+    onFollowActiveChange(true)
     void mic.startHold()
   }
 
@@ -266,17 +291,19 @@ export function StoryScene({
         onRestore(termRef.current.id)
         onChoice({ scene: chapter.scene, type: 'follow', termId: termRef.current.id })
       }
+      onFollowActiveChange(false)
       micStopHold()
       setQuickCapture(false)
     }, 2800)
     return () => window.clearTimeout(timer)
-  }, [chapter.scene, micIsActive, micStopHold, onChoice, onRestore, quickCapture])
+  }, [chapter.scene, micIsActive, micStopHold, onChoice, onFollowActiveChange, onRestore, quickCapture])
 
   const endFollow = () => {
     if (mic.isActive) {
       onRestore(term.id)
       onChoice({ scene: chapter.scene, type: 'follow', termId: term.id })
     }
+    onFollowActiveChange(false)
     mic.stopHold()
   }
 
@@ -326,9 +353,11 @@ export function StoryScene({
         ? '补充解释 · 部分复原'
         : isRestored
           ? '部分复原 · 仍有错位'
-          : speaking
-            ? '完整 · 受力 · 裂纹'
-            : '完整 · 裂纹 · 碎裂 · 悬停'
+          : speaking && playbackKind === 'placeholder'
+            ? '录音缺失 · 演示节奏'
+            : speaking
+              ? '完整 · 受力 · 裂纹'
+              : '完整 · 裂纹 · 碎裂 · 悬停'
   return (
     <main
       className={`story-scene story-scene--${chapter.scene}`}
@@ -375,6 +404,8 @@ export function StoryScene({
           fragmentBias={isDeparting ? 0.55 : 0}
           chapter={chapter.scene}
           fractureMode="voice"
+          getVoicePlayback={getVoicePlayback}
+          nextText={chapter.terms[termIndex + 1]?.display}
           labelPrefix="母亲的话"
         />
 

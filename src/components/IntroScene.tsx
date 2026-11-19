@@ -1,4 +1,6 @@
 import { introCopy } from '../content/scenes'
+import { callTerms } from '../content/terms'
+import { GlassPrewarm } from './SoundTextCanvas'
 
 interface IntroSceneProps {
   onStart: () => void
@@ -6,8 +8,34 @@ interface IntroSceneProps {
 }
 
 export function IntroScene({ onStart, onOpenAbout }: IntroSceneProps) {
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const prewarmWidth =
+    viewportWidth <= 720
+      ? viewportWidth
+      : Math.min(
+          1408,
+          viewportWidth * (viewportWidth <= 900 ? 0.96 : 0.92),
+        )
+  let prewarmHeight =
+    viewportWidth <= 430
+      ? Math.min(352, Math.max(224, viewportHeight * 0.37))
+      : viewportWidth <= 720
+        ? Math.min(416, Math.max(240, viewportHeight * 0.39))
+        : Math.min(560, Math.max(304, viewportHeight * 0.49))
+  if (viewportWidth > 720 && viewportHeight <= 760) {
+    prewarmHeight = Math.min(400, Math.max(240, viewportHeight * 0.43))
+  }
+
   return (
     <main className="intro-scene">
+      <GlassPrewarm
+        width={Math.round(prewarmWidth)}
+        height={Math.round(prewarmHeight)}
+        text={callTerms[0].display}
+        chapter="call"
+        reducedMotion={window.matchMedia('(prefers-reduced-motion: reduce)').matches}
+      />
       <div className="intro-thread" aria-hidden="true">
         <svg viewBox="0 0 640 70" preserveAspectRatio="none">
           <path
