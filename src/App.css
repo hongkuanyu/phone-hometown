@@ -492,10 +492,12 @@ button { cursor: pointer; }
 .meaning-drawer__kicker { color: var(--color-muted); font-size: 0.68rem; letter-spacing: 0.12em; }
 
 .icon-button {
-  min-height: 2.75rem;
-  padding: 0.35rem 0;
+  min-width: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0.35rem 0.4rem;
   color: #8e877b;
   font-size: 0.7rem;
+  text-align: center;
   border-bottom: 1px solid transparent;
 }
 
@@ -586,6 +588,21 @@ button { cursor: pointer; }
   .follow-panel { width: 13.2rem; }
   .about-header { grid-template-columns: minmax(0, 1fr) minmax(14rem, 25rem); column-gap: 2rem; }
   .about-grid { gap: 2.5rem; }
+}
+
+@media (pointer: coarse) {
+  .primary-button--small,
+  .quiet-button,
+  .text-button,
+  .intro-about,
+  .utility-button,
+  .icon-button,
+  .archive-play,
+  .quick-record-button,
+  .speed-button,
+  .panel-button {
+    min-height: var(--control-height);
+  }
 }
 
 @media (max-width: 720px) {

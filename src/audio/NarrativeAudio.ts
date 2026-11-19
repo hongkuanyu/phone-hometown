@@ -20,6 +20,16 @@ interface ActiveVoicePlayback {
   sourceNode: AudioBufferSourceNode | null
 }
 
+interface ActiveMediaPlayback {
+  token: number
+  kind: 'main' | 'supplement'
+  audio: HTMLAudioElement
+  duration: number
+  rate: number
+  ended: boolean
+  lastPosition: number
+}
+
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value))
 
@@ -52,6 +62,7 @@ export class NarrativeAudio {
   private voiceToken = 0
   private currentUtterance: SpeechSynthesisUtterance | null = null
   private activeVoicePlayback: ActiveVoicePlayback | null = null
+  private activeMediaPlayback: ActiveMediaPlayback | null = null
   private readonly voiceSnapshot: VoicePlaybackSnapshot = {
     id: 0,
     kind: 'none',
@@ -143,6 +154,7 @@ export class NarrativeAudio {
         0.05,
       )
     }
+    if (this.activeMediaPlayback) this.activeMediaPlayback.audio.muted = muted
     if (muted) this.stopVoice()
   }
 
@@ -157,6 +169,9 @@ export class NarrativeAudio {
     }
     if (this.currentUtterance) {
       this.currentUtterance.volume = clamp(this.voiceVolume * 0.82, 0, 1)
+    }
+    if (this.activeMediaPlayback) {
+      this.activeMediaPlayback.audio.volume = this.voiceVolume
     }
   }
 
@@ -234,6 +249,35 @@ export class NarrativeAudio {
 
   /** Media-time snapshot for the currently audible mother voice. */
   getVoicePlayback(): VoicePlaybackSnapshot {
+    const media = this.activeMediaPlayback
+    if (!this.activeVoicePlayback && media) {
+      const duration = Number.isFinite(media.audio.duration)
+        ? media.audio.duration
+        : media.duration
+      const currentPosition = media.audio.currentTime
+      const resetAfterEnd =
+        media.lastPosition >= duration - 0.12 && currentPosition < 0.05
+      const ended = media.ended || media.audio.ended || resetAfterEnd
+      if (ended) media.ended = true
+      media.lastPosition = ended
+        ? duration
+        : Math.max(media.lastPosition, currentPosition)
+      const position = ended ? duration : currentPosition
+      this.voiceSnapshot.id = media.token
+      this.voiceSnapshot.kind = media.kind
+      this.voiceSnapshot.active = !ended
+      this.voiceSnapshot.ended = ended
+      this.voiceSnapshot.paused =
+        media.audio.paused ||
+        this.paused ||
+        this.hidden ||
+        this.interactionPaused
+      this.voiceSnapshot.positionSec = clamp(position, 0, duration)
+      this.voiceSnapshot.durationSec = duration
+      this.voiceSnapshot.rate = media.rate
+      return this.voiceSnapshot
+    }
+
     const playback = this.activeVoicePlayback
     if (!playback) {
       this.voiceSnapshot.id = this.voiceToken
@@ -265,13 +309,25 @@ export class NarrativeAudio {
 
   setInteractionPaused(paused: boolean) {
     if (this.interactionPaused === paused) return
-    if (paused) this.freezeVoiceClock()
-    else this.reanchorVoiceClock()
+    if (paused) {
+      this.freezeVoiceClock()
+      this.activeMediaPlayback?.audio.pause()
+    } else {
+      this.reanchorVoiceClock()
+      void this.activeMediaPlayback?.audio.play().catch(() => {})
+    }
     this.interactionPaused = paused
     this.syncContextState()
   }
 
   setVoicePlaybackRate(rate: number) {
+    const media = this.activeMediaPlayback
+    if (media) {
+      const nextRate = clamp(rate, 0.5, 1.5)
+      media.audio.playbackRate = nextRate
+      media.rate = nextRate
+      return
+    }
     const playback = this.activeVoicePlayback
     if (!playback || playback.ended || !this.context) return
     const nextRate = clamp(rate, 0.5, 1.5)
@@ -489,15 +545,32 @@ export class NarrativeAudio {
     rate = 1,
     startDelaySec = 0,
   ): Promise<AudioPlaybackResult> {
-    if (!this.context || this.muted || this.paused || this.hidden) {
+    if (this.muted || this.paused || this.hidden) {
       return { kind: 'placeholder', durationMs: 0 }
     }
     this.stopVoice()
     const token = this.voiceToken
 
     if (term.audioSrc) {
+      if (this.context) {
+        try {
+          const duration = await this.playAudioSource(
+            term.audioSrc,
+            rate,
+            token,
+            'main',
+            startDelaySec,
+          )
+          return {
+            kind: 'recording',
+            durationMs: (duration / Math.max(0.1, rate)) * 1000,
+          }
+        } catch (error) {
+          console.warn('Web Audio term playback failed; trying media fallback.', error)
+        }
+      }
       try {
-        const duration = await this.playAudioSource(
+        const duration = await this.playMediaSource(
           term.audioSrc,
           rate,
           token,
@@ -527,15 +600,35 @@ export class NarrativeAudio {
     rate = 1,
     startDelaySec = 0,
   ): Promise<AudioPlaybackResult> {
-    if (!this.context || this.muted || this.paused || this.hidden) {
+    if (this.muted || this.paused || this.hidden) {
       return { kind: 'placeholder', durationMs: 0 }
     }
     this.stopVoice()
     const token = this.voiceToken
 
     if (term.supplementAudioSrc) {
+      if (this.context) {
+        try {
+          const duration = await this.playAudioSource(
+            term.supplementAudioSrc,
+            rate,
+            token,
+            'supplement',
+            startDelaySec,
+          )
+          return {
+            kind: 'recording',
+            durationMs: (duration / Math.max(0.1, rate)) * 1000,
+          }
+        } catch (error) {
+          console.warn(
+            'Web Audio supplement playback failed; trying media fallback.',
+            error,
+          )
+        }
+      }
       try {
-        const duration = await this.playAudioSource(
+        const duration = await this.playMediaSource(
           term.supplementAudioSrc,
           rate,
           token,
@@ -578,6 +671,73 @@ export class NarrativeAudio {
       ended: false,
       sourceNode: null,
     }
+  }
+
+  private async playMediaSource(
+    source: string,
+    rate: number,
+    token: number,
+    kind: 'main' | 'supplement',
+    startDelaySec = 0,
+  ) {
+    const audio = new Audio()
+    audio.preload = 'auto'
+    audio.volume = this.voiceVolume
+    audio.playbackRate = rate
+    audio.muted = this.muted
+
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        audio.removeEventListener('loadedmetadata', handleLoaded)
+        audio.removeEventListener('error', handleError)
+      }
+      const handleLoaded = () => {
+        cleanup()
+        resolve()
+      }
+      const handleError = () => {
+        cleanup()
+        reject(new Error('Media element could not load term audio'))
+      }
+      audio.addEventListener('loadedmetadata', handleLoaded)
+      audio.addEventListener('error', handleError)
+      audio.src = new URL(source, document.baseURI).href
+      audio.load()
+    })
+
+    if (startDelaySec > 0) {
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, startDelaySec * 1000),
+      )
+    }
+    if (token !== this.voiceToken) return 0
+
+    const duration = Number.isFinite(audio.duration) ? audio.duration : 0
+    if (duration <= 0) {
+      throw new Error('Media element returned an invalid duration')
+    }
+    const playback: ActiveMediaPlayback = {
+      token,
+      kind,
+      audio,
+      duration,
+      rate,
+      ended: false,
+      lastPosition: 0,
+    }
+    await audio.play()
+    if (token !== this.voiceToken) {
+      audio.pause()
+      return 0
+    }
+    this.activeMediaPlayback = playback
+    audio.onended = () => {
+      if (this.activeMediaPlayback === playback) {
+        playback.ended = true
+        playback.lastPosition = playback.duration
+      }
+    }
+    return duration
   }
 
   private async playAudioSource(
@@ -696,6 +856,11 @@ export class NarrativeAudio {
   stopVoice() {
     this.voiceToken += 1
     this.activeVoicePlayback = null
+    if (this.activeMediaPlayback) {
+      this.activeMediaPlayback.audio.pause()
+      this.activeMediaPlayback.audio.removeAttribute('src')
+      this.activeMediaPlayback = null
+    }
     this.activeVoiceSources.forEach((source) => {
       try {
         source.stop()
@@ -719,8 +884,13 @@ export class NarrativeAudio {
   }
 
   setPaused(paused: boolean) {
-    if (paused) this.freezeVoiceClock()
-    else this.reanchorVoiceClock()
+    if (paused) {
+      this.freezeVoiceClock()
+      this.activeMediaPlayback?.audio.pause()
+    } else {
+      this.reanchorVoiceClock()
+      void this.activeMediaPlayback?.audio.play().catch(() => {})
+    }
     this.paused = paused
     if ('speechSynthesis' in window) {
       if (paused) window.speechSynthesis.pause()
@@ -730,8 +900,13 @@ export class NarrativeAudio {
   }
 
   pauseForVisibility(hidden: boolean) {
-    if (hidden) this.freezeVoiceClock()
-    else this.reanchorVoiceClock()
+    if (hidden) {
+      this.freezeVoiceClock()
+      this.activeMediaPlayback?.audio.pause()
+    } else {
+      this.reanchorVoiceClock()
+      void this.activeMediaPlayback?.audio.play().catch(() => {})
+    }
     this.hidden = hidden
     if ('speechSynthesis' in window) {
       if (hidden) window.speechSynthesis.pause()
@@ -760,6 +935,7 @@ export class NarrativeAudio {
   async close() {
     this.stopVoice()
     this.stopAmbient()
+    this.activeMediaPlayback = null
     if (this.context) await this.context.close()
     this.context = null
   }
