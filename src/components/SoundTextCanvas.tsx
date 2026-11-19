@@ -344,9 +344,9 @@ function makeFragmentSprite(
 
   context.globalCompositeOperation = 'source-atop'
   context.strokeStyle = restored
-    ? 'rgba(255, 255, 250, 0.76)'
-    : 'rgba(239, 228, 210, 0.4)'
-  context.lineWidth = restored ? 0.9 : 0.7
+    ? 'rgba(255, 255, 250, 0.58)'
+    : 'rgba(239, 228, 210, 0.28)'
+  context.lineWidth = restored ? 0.65 : 0.52
   tracePolygon(context, polygon)
   context.stroke()
   context.globalCompositeOperation = 'source-over'
@@ -418,7 +418,7 @@ function makeCrackLayers(
     layers[layer].push(edge)
   }
 
-  return layers.map((layer, layerIndex) => {
+  return layers.map((layer) => {
     const surface = createSurface(width, height, dpr)
     const context = surface.getContext('2d')
     if (!context) return surface
@@ -427,32 +427,15 @@ function makeCrackLayers(
     context.lineJoin = 'round'
 
     for (const edge of layer) {
-      const dx = edge.end.x - edge.start.x
-      const dy = edge.end.y - edge.start.y
-      const length = Math.max(1, Math.hypot(dx, dy))
-      const normalX = -dy / length
-      const normalY = dx / length
-      const steps = 4
-      const jitterRange = layerIndex === 0 ? 0.45 : 0.75
-
       context.beginPath()
       context.moveTo(edge.start.x, edge.start.y)
-      for (let step = 1; step < steps; step += 1) {
-        const ratio = step / steps
-        const jitter = (rng() * 2 - 1) * jitterRange
-        context.lineTo(
-          edge.start.x + dx * ratio + normalX * jitter,
-          edge.start.y + dy * ratio + normalY * jitter,
-        )
-      }
       context.lineTo(edge.end.x, edge.end.y)
       context.strokeStyle =
-        rng() > 0.72
-          ? 'rgba(168, 68, 50, 0.68)'
-          : 'rgba(246, 240, 228, 0.82)'
-      context.lineWidth = 0.8 + rng() * 0.55
+        rng() > 0.78
+          ? 'rgba(168, 68, 50, 0.52)'
+          : 'rgba(246, 240, 228, 0.62)'
+      context.lineWidth = 0.44 + rng() * 0.28
       context.stroke()
-
     }
 
     context.setTransform(1, 0, 0, 1, 0, 0)
@@ -970,9 +953,23 @@ export function SoundTextCanvas({
       )
       const showFragments =
         recombineActive ||
-        separation > 0.012 ||
+        postHold > 0 ||
         motionFactor > 0.02 ||
         restorationEnergy > 0.05
+      const fragmentReveal = showFragments
+        ? recombineActive
+          ? 1
+          : clamp(
+              Math.max(
+                postHold,
+                (motionFactor + restorationEnergy) * 36,
+              ) / 36,
+              0,
+              1,
+            )
+        : 0
+      const directGlyphAlpha = showFragments ? (1 - fragmentReveal) * 0.92 : 0.92
+      const crackVisibility = 1 - clamp(separation * 0.78 + settle * 0.16, 0, 0.94)
       const stressJitter =
         crackProgress * (0.5 + voice * 1.8) * (current.reducedMotion ? 0.25 : 1)
       lastPostHoldRef.current = postHold
@@ -994,11 +991,11 @@ export function SoundTextCanvas({
         canvas.dataset.glassRecombine = String(recombineActive)
       }
 
-      if (!showFragments) {
+      if (directGlyphAlpha > 0.001) {
         context.textAlign = 'center'
         context.textBaseline = 'middle'
         context.fillStyle = '#A84432'
-        context.globalAlpha = 0.92
+        context.globalAlpha = directGlyphAlpha
         for (const char of chars) {
           const jitterX =
             Math.sin(time * 1.15 + char.x * 0.025) * stressJitter
@@ -1008,22 +1005,24 @@ export function SoundTextCanvas({
           context.fillText(char.char, char.x + jitterX, char.y + jitterY)
         }
         context.globalAlpha = 1
-      } else {
-        // The full silhouette fades as the pieces settle; fragments remain the anchor.
-        const ghostFade = 1 - settle * 0.65
+      }
+
+      if (showFragments) {
+        // A quiet glyph memory remains behind the moving pieces without restoring a crisp base image.
+        const ghostFade = 1 - settle * 0.78
         context.globalAlpha = clamp(
-          (0.14 + restorationEnergy * 0.06) * ghostFade,
-          0.045,
-          0.2,
+          (0.105 + restorationEnergy * 0.045) * ghostFade,
+          0.025,
+          0.16,
         )
         context.drawImage(glyphSurface, 0, 0, width, height)
         context.globalAlpha = clamp(
-          ((width < 660 ? 0.3 : 0.24) + restorationEnergy * 0.1) * ghostFade,
-          0.055,
-          0.36,
+          (0.18 + restorationEnergy * 0.08) * ghostFade,
+          0.035,
+          0.26,
         )
-        context.strokeStyle = 'rgba(242, 242, 234, 0.62)'
-        context.lineWidth = 0.55
+        context.strokeStyle = '#F2F2EA'
+        context.lineWidth = 0.42
         context.textAlign = 'center'
         context.textBaseline = 'middle'
         for (const char of chars) {
@@ -1040,8 +1039,8 @@ export function SoundTextCanvas({
       ]
       for (let index = 0; index < crackLayers.length; index += 1) {
         const alpha = crackAlphas[index] ?? 0
-        if (alpha <= 0) continue
-        context.globalAlpha = alpha * 0.95
+        if (alpha <= 0 || crackVisibility <= 0.01) continue
+        context.globalAlpha = alpha * 0.78 * crackVisibility
         context.drawImage(crackLayers[index], 0, 0, width, height)
       }
       context.globalAlpha = 1
@@ -1069,7 +1068,7 @@ export function SoundTextCanvas({
         }
       }
 
-      if (showFragments) {
+      if (showFragments && fragmentReveal > 0.001) {
         for (const fragment of fragments) {
           const localPostHold = recombineActive
             ? postHold
@@ -1137,15 +1136,7 @@ export function SoundTextCanvas({
             : fragment.sprite
 
           context.save()
-          context.globalAlpha = clamp(opacity, 0.28, 0.96)
-          if (
-            width >= 660 &&
-            !current.reducedMotion &&
-            localSettle > 0.35 &&
-            fragment.depth < -0.45
-          ) {
-            context.filter = `blur(${0.28 + Math.abs(fragment.depth) * 0.45}px)`
-          }
+          context.globalAlpha = clamp(opacity * fragmentReveal, 0, 0.96)
           context.translate(
             fragment.centroid.x + dx,
             fragment.centroid.y + dy,

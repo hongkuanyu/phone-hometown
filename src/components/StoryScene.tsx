@@ -48,7 +48,7 @@ interface StorySceneProps {
 }
 
 const followStatusCopy = {
-  idle: '按住跟读 · 最长 5 秒',
+  idle: '最长 5 秒 · 松开结束',
   requesting: '正在等待麦克风权限',
   recording: '正在记录你的节奏 · 松开结束',
   listening: '麦克风已开启 · 当前浏览器不能保存录音',

@@ -42,9 +42,10 @@ button {
 
 button:focus-visible,
 summary:focus-visible,
-a:focus-visible {
-  outline: 1px solid #f2f2ea;
-  outline-offset: 5px;
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid #f2f2ea;
+  outline-offset: 3px;
 }
 
 ::selection {
