@@ -1,5 +1,5 @@
 import { GLASS_TIMING } from '../config/glassTiming'
-import type { AmbientMode, StoryTerm } from '../types'
+import type { AmbientMode, AudioPlaybackResult, StoryTerm } from '../types'
 
 type AudioContextConstructor = typeof AudioContext
 
@@ -7,8 +7,9 @@ const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value))
 
 /**
- * Web Audio soundscape with an explicit placeholder voice path.
- * Authorized local recordings take priority when an audioSrc is configured.
+ * Web Audio soundscape for generated ambience plus delivered family recordings.
+ * Recorded main lines and supplemental explanations take priority over the
+ * browser speech-synthesis fallback.
  */
 export class NarrativeAudio {
   private context: AudioContext | null = null
@@ -377,17 +378,20 @@ export class NarrativeAudio {
     }, 900)
     this.ambientGain = null
   }
-  async playTerm(term: StoryTerm, rate = 1): Promise<'recording' | 'placeholder'> {
+  async playTerm(term: StoryTerm, rate = 1): Promise<AudioPlaybackResult> {
     if (!this.context || this.muted || this.paused || this.hidden) {
-      return 'placeholder'
+      return { kind: 'placeholder', durationMs: 0 }
     }
     this.stopVoice()
     const token = this.voiceToken
 
     if (term.audioSrc) {
       try {
-        await this.playAudioSource(term.audioSrc, rate, token)
-        return 'recording'
+        const duration = await this.playAudioSource(term.audioSrc, rate, token)
+        return {
+          kind: 'recording',
+          durationMs: (duration / Math.max(0.1, rate)) * 1000,
+        }
       } catch (error) {
         console.warn('Local term audio failed; using generated placeholder.', error)
       }
@@ -395,14 +399,38 @@ export class NarrativeAudio {
 
     this.playBreathPulse(term.spokenText, rate)
     this.speakPlaceholder(term.spokenText, rate * 0.95)
-    return 'placeholder'
+    return { kind: 'placeholder', durationMs: 0 }
   }
 
-  playHint(text: string, rate = 0.9) {
-    if (!this.context || this.muted || this.paused || this.hidden) return
+  async playSupplement(term: StoryTerm, rate = 1): Promise<AudioPlaybackResult> {
+    if (!this.context || this.muted || this.paused || this.hidden) {
+      return { kind: 'placeholder', durationMs: 0 }
+    }
     this.stopVoice()
-    this.playBreathPulse(text, rate, 0.24)
-    this.speakPlaceholder(text, rate, 0.52)
+    const token = this.voiceToken
+
+    if (term.supplementAudioSrc) {
+      try {
+        const duration = await this.playAudioSource(
+          term.supplementAudioSrc,
+          rate,
+          token,
+        )
+        return {
+          kind: 'recording',
+          durationMs: (duration / Math.max(0.1, rate)) * 1000,
+        }
+      } catch (error) {
+        console.warn(
+          'Local supplement audio failed; using generated placeholder.',
+          error,
+        )
+      }
+    }
+
+    this.playBreathPulse(term.supplement, rate, 0.24)
+    this.speakPlaceholder(term.supplement, rate, 0.52)
+    return { kind: 'placeholder', durationMs: 0 }
   }
 
   private async playAudioSource(source: string, rate: number, token: number) {
@@ -410,7 +438,7 @@ export class NarrativeAudio {
     const response = await fetch(new URL(source, document.baseURI))
     if (!response.ok) throw new Error(`Term audio ${response.status}`)
     const buffer = await context.decodeAudioData(await response.arrayBuffer())
-    if (token !== this.voiceToken) return
+    if (token !== this.voiceToken) return 0
 
     const sourceNode = context.createBufferSource()
     const filter = context.createBiquadFilter()
@@ -418,7 +446,7 @@ export class NarrativeAudio {
     sourceNode.buffer = buffer
     sourceNode.playbackRate.value = rate
     filter.type = 'lowpass'
-    filter.frequency.value = 7200
+    filter.frequency.value = 9000
     gain.gain.value = 0.95
     sourceNode.connect(filter)
     filter.connect(gain)
@@ -428,6 +456,7 @@ export class NarrativeAudio {
     sourceNode.onended = () => {
       this.activeVoiceSources = this.activeVoiceSources.filter((node) => node !== sourceNode)
     }
+    return buffer.duration
   }
 
   private playBreathPulse(text: string, rate: number, volume = 0.58) {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
+  AudioPlaybackResult,
   Choice,
   MicPermission,
   PlaybackRate,
@@ -37,8 +38,12 @@ interface StorySceneProps {
   onRestartChapter: () => void
   onOpenAbout: () => void
   onAdvance: () => void
-  onPlayTerm: (term: StoryTerm, rate?: number, manual?: boolean) => void
-  onExplain: (term: StoryTerm) => void
+  onPlayTerm: (
+    term: StoryTerm,
+    rate?: number,
+    manual?: boolean,
+  ) => Promise<AudioPlaybackResult>
+  onExplain: (term: StoryTerm) => Promise<AudioPlaybackResult>
   onOpenMeaning: () => void
   onCloseMeaning: () => void
   onRestore: (termId: string) => void
@@ -99,6 +104,7 @@ export function StoryScene({
   const termRef = useRef(term)
   const playedRef = useRef('')
   const exitTimerRef = useRef<number | null>(null)
+  const playbackRequestRef = useRef(0)
   const meaningButtonRef = useRef<HTMLButtonElement>(null)
   const isCooling = chapter.scene === 'cooling'
   const isRestored = restoredTermIds.includes(term.id)
@@ -135,8 +141,18 @@ export function StoryScene({
     if (audioMuted || audioPaused) return
     if (playedRef.current === term.id) return
     playedRef.current = term.id
+    const requestId = ++playbackRequestRef.current
     markSpeaking(6800 / playbackRate)
-    onPlayTerm(term, (term.voiceRate ?? 1) * playbackRate, false)
+    void onPlayTerm(term, (term.voiceRate ?? 1) * playbackRate, false).then(
+      (result) => {
+        if (
+          requestId === playbackRequestRef.current &&
+          result.durationMs > 0
+        ) {
+          markSpeaking(result.durationMs + 180)
+        }
+      },
+    )
   }, [audioMuted, audioPaused, markSpeaking, onPlayTerm, playbackRate, term])
 
 
@@ -180,16 +196,34 @@ export function StoryScene({
   const replay = () => {
     onChoice({ scene: chapter.scene, type: 'replay', termId: term.id })
     setPulse((value) => value + 1)
+    const requestId = ++playbackRequestRef.current
     markSpeaking(6800 / playbackRate)
-    onPlayTerm(term, (term.voiceRate ?? 1) * playbackRate * 0.82, true)
+    void onPlayTerm(term, (term.voiceRate ?? 1) * playbackRate, true).then(
+      (result) => {
+        if (
+          requestId === playbackRequestRef.current &&
+          result.durationMs > 0
+        ) {
+          markSpeaking(result.durationMs + 180)
+        }
+      },
+    )
   }
 
   const explain = () => {
     onChoice({ scene: chapter.scene, type: 'explain', termId: term.id })
     setPulse((value) => value + 1)
+    const requestId = ++playbackRequestRef.current
     markSpeaking(9000 / playbackRate)
     onRestore(term.id)
-    onExplain(term)
+    void onExplain(term).then((result) => {
+      if (
+        requestId === playbackRequestRef.current &&
+        result.durationMs > 0
+      ) {
+        markSpeaking(result.durationMs + 180)
+      }
+    })
   }
 
   const openMeaning = () => {

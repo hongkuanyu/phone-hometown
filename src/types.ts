@@ -25,10 +25,17 @@ export interface StoryTerm {
   supplement: string
   beat: string
   /** Keep the editorial status in data only; do not surface it in the main UI. */
-  transcriptStatus: 'placeholder' | 'confirmed'
-  /** Add an authorized local recording here later, for example `audio/call-01.mp3`. */
+  transcriptStatus: 'placeholder' | 'recorded' | 'confirmed'
+  /** Authorized main-sentence recording for this term. */
   audioSrc?: string
+  /** Optional recording of the mother's supplemental explanation. */
+  supplementAudioSrc?: string
   voiceRate?: number
+}
+
+export interface AudioPlaybackResult {
+  kind: 'recording' | 'placeholder'
+  durationMs: number
 }
 
 export interface StoryChapter {

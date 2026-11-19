@@ -1,7 +1,7 @@
 import type { StoryTerm } from '../types'
 
 /**
- * Editorial placeholder transcriptions.
+ * Recorded family terms and editorial transcriptions.
  * `transcriptStatus` stays in data/README only and is intentionally not rendered
  * as a warning in the audience-facing experience.
  */
@@ -18,8 +18,10 @@ export const callTerms: StoryTerm[] = [
     mandarinHint: '她先问你，吃过晚饭没有。',
     context: '电话刚接通，厨房里的水声还没有停。她问得很轻，好像只是顺口一提。',
     supplement: '我刚刚把碗洗掉，灶台上还热着一只砂锅。你不要又随便吃两口就算了。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.92,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/call-01-main.m4a',
+    supplementAudioSrc: 'audio/mother/call-01-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'call-02',
@@ -33,8 +35,10 @@ export const callTerms: StoryTerm[] = [
     mandarinHint: '她说常州突然降温，风也比前几天硬。',
     context: '天气预报在客厅里响着。她没有直接说“多穿点”，只把常州的风说给你听。',
     supplement: '你那边靠海，风大概更冷。我记得你有一件厚衣裳，不晓得有没有带过去。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.9,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/call-02-main.m4a',
+    supplementAudioSrc: 'audio/mother/call-02-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'call-03',
@@ -48,8 +52,10 @@ export const callTerms: StoryTerm[] = [
     mandarinHint: '她问衣服够不够，又怕你夜里穿得太少。',
     context: '她一边说，一边把阳台上的衣架挪开。衣架碰到栏杆，发出很轻的一声。',
     supplement: '我不是要管你。就是想到你小时候一冷就咳嗽，话到嘴边就多问了一句。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.9,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/call-03-main.m4a',
+    supplementAudioSrc: 'audio/mother/call-03-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'call-04',
@@ -63,8 +69,10 @@ export const callTerms: StoryTerm[] = [
     mandarinHint: '她说今天去菜场转了一圈，人很多。',
     context: '她把菜场说成一个热闹的地方，声音却慢慢低下来，像是想起你也曾跟在她身后。',
     supplement: '卖鱼的还是那个老板，问我你怎么没来。我讲你在外头忙，他就笑笑，把鱼鳞刮得更响。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.88,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/call-04-main.m4a',
+    supplementAudioSrc: 'audio/mother/call-04-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'call-05',
@@ -78,8 +86,10 @@ export const callTerms: StoryTerm[] = [
     mandarinHint: '隔壁阿婆问起你，说很久没见到你了。',
     context: '走廊里传来邻居关门的声响。她停了一下，才把这句话说完。',
     supplement: '我跟她讲你过年会回来。讲完才想起来，还没有问过你今年几时回来。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.88,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/call-05-main.m4a',
+    supplementAudioSrc: 'audio/mother/call-05-supplement.m4a',
+    voiceRate: 1,
   },
 ]
 export const stoveTerms: StoryTerm[] = [
@@ -95,8 +105,10 @@ export const stoveTerms: StoryTerm[] = [
     mandarinHint: '她说灶上炖着汤，汤色已经熬白了。',
     context: '锅盖被水汽顶得轻轻响。她把火调小，又把抹布搭回灶台边。',
     supplement: '笋是前两天买的，咸肉还剩半块。你小辰光站在灶台边等，我总要先盛一小碗给你。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.86,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/stove-01-main.m4a',
+    supplementAudioSrc: 'audio/mother/stove-01-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'stove-02',
@@ -110,8 +122,10 @@ export const stoveTerms: StoryTerm[] = [
     mandarinHint: '她先把葱姜煸香，再往锅里放别的。',
     context: '油在锅底散开一层细小的光。葱段碰到热油，厨房里忽然有了明确的香气。',
     supplement: '火不要大，急了就苦。做饭和讲话一样的，慢一点，味道才出得来。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.84,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/stove-02-main.m4a',
+    supplementAudioSrc: 'audio/mother/stove-02-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'stove-03',
@@ -125,8 +139,10 @@ export const stoveTerms: StoryTerm[] = [
     mandarinHint: '她让火一直小着，慢慢把汤煨白。',
     context: '“笃”既是锅里的响声，也是她愿意为一顿饭等下去的时间。',
     supplement: '你总问我为什么家里的汤更鲜。其实没有什么秘诀，就是别催它。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.82,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/stove-03-main.m4a',
+    supplementAudioSrc: 'audio/mother/stove-03-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'stove-04',
@@ -140,8 +156,10 @@ export const stoveTerms: StoryTerm[] = [
     mandarinHint: '她让你别频繁掀锅盖，免得热气跑掉。',
     context: '你小时候总想知道锅里好了没有。她一次次把锅盖盖回去，却也会顺手让你闻一闻。',
     supplement: '有些味道要闷在里头。你老掀开看，看到的只是水汽，不是汤。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.82,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/stove-04-main.m4a',
+    supplementAudioSrc: 'audio/mother/stove-04-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'stove-05',
@@ -155,8 +173,10 @@ export const stoveTerms: StoryTerm[] = [
     mandarinHint: '她把筷子和碗摆好，仍放在你以前的位置。',
     context: '碗底碰到桌面，声音很轻。桌上多摆的一副筷子，像一句没有追问的等待。',
     supplement: '你不在家，我也还是这样摆。习惯了，改不过来。反正位置空着，也不碍事。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.84,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/stove-05-main.m4a',
+    supplementAudioSrc: 'audio/mother/stove-05-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'stove-06',
@@ -170,8 +190,10 @@ export const stoveTerms: StoryTerm[] = [
     mandarinHint: '她让你吃不完就收好，第二天热一热再吃。',
     context: '她说完停了一会儿，像是在等你说“我明天回来吃”，又像知道你不会这样说。',
     supplement: '一个人也要好好吃饭。剩菜热一热不要紧，不要把自己也随便放凉了。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.8,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/stove-06-main.m4a',
+    supplementAudioSrc: 'audio/mother/stove-06-supplement.m4a',
+    voiceRate: 1,
   },
 ]
 export const coolingTerms: StoryTerm[] = [
@@ -187,8 +209,10 @@ export const coolingTerms: StoryTerm[] = [
     mandarinHint: '她说把竹榻搬到外面，坐着吹夜风。',
     context: '竹片被身体压出细小的响声。暑气从窗边退开一点，天井里还留着白天的余温。',
     supplement: '那张竹榻比你的年纪还大。你小时候躺上去，总要我拿扇子守着你。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.8,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/cooling-01-main.m4a',
+    supplementAudioSrc: 'audio/mother/cooling-01-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'cooling-02',
@@ -202,8 +226,10 @@ export const coolingTerms: StoryTerm[] = [
     mandarinHint: '她往天井地面洒井水，让夜里的热气散掉。',
     context: '水泼在青石板上，很快收进去。空气里浮起一点潮湿的土味。',
     supplement: '井水刚打上来的时候冷得手疼。你小时候偏要玩，后来又把湿手往我衣裳上擦。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.78,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/cooling-02-main.m4a',
+    supplementAudioSrc: 'audio/mother/cooling-02-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'cooling-03',
@@ -217,8 +243,10 @@ export const coolingTerms: StoryTerm[] = [
     mandarinHint: '她把西瓜浸在井水里降温，说这样更甜。',
     context: '西瓜浮在木盆里，半边沉进水里。你总想先吃中间那一口，她就把最甜的地方留给你。',
     supplement: '现在的冰箱冷得快，可我还是觉得井水浸出来的好。可能也不是甜，就是那个时候的样子。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.78,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/cooling-03-main.m4a',
+    supplementAudioSrc: 'audio/mother/cooling-03-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'cooling-04',
@@ -232,8 +260,10 @@ export const coolingTerms: StoryTerm[] = [
     mandarinHint: '她一边扇风，一边替你赶蚊子。',
     context: '扇面拍在空气里，声音比风先到。她扇一会儿，停一会儿，很慢。',
     supplement: '你睡着我还在扇。手酸了就换一只手。那时候不觉得累，只想着你别被蚊子咬醒。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.78,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/cooling-04-main.m4a',
+    supplementAudioSrc: 'audio/mother/cooling-04-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'cooling-05',
@@ -247,8 +277,10 @@ export const coolingTerms: StoryTerm[] = [
     mandarinHint: '她让你把收音机声音调小，别吵到邻居。',
     context: '远处有人家在听评弹，唱词听不完整，只剩一小段曲调在巷子里走。',
     supplement: '你外公也爱听。后来他不在了，收音机还是开着。屋里有个声音，心就不那么空。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.76,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/cooling-05-main.m4a',
+    supplementAudioSrc: 'audio/mother/cooling-05-supplement.m4a',
+    voiceRate: 1,
   },
   {
     id: 'cooling-06',
@@ -262,8 +294,10 @@ export const coolingTerms: StoryTerm[] = [
     mandarinHint: '她说你小时候总是坐在她旁边。',
     context: '这句话没有要你回答。竹榻的另一半空着，她还是把蒲扇往那边偏了偏。',
     supplement: '现在你回来，也不一定坐得住了。不要紧。你站在那里，我也知道你回来了。',
-    transcriptStatus: 'placeholder',
-    voiceRate: 0.74,
+    transcriptStatus: 'recorded',
+    audioSrc: 'audio/mother/cooling-06-main.m4a',
+    supplementAudioSrc: 'audio/mother/cooling-06-supplement.m4a',
+    voiceRate: 1,
   },
 ]
 

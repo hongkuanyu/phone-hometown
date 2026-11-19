@@ -22,7 +22,7 @@ npm run preview
 
 - `intro → call → stove → transition → cooling → ending → about` 完整状态机。
 - 电话 5 句、灶台 6 句、纳凉 6 句，包含重听、追问、查看意思、跳过、装作听懂与跟读。
-- Canvas 玻璃文字场：真实字形 alpha mask、稳定种子的不规则 Voronoi 碎片、分级裂纹扩散、冲击闪光、悬停漂移和冷白碎片复原；桌面 24—48 片、移动端 12—24 片，reduced-motion 进一步降级。
+- Canvas 玻璃文字场：真实字形 alpha mask、稳定种子的不规则 Voronoi 碎片、分级裂纹扩散、冲击闪光、悬停漂移和冷白碎片复原；碎片数量按整段文字场预算控制，移动端与 reduced-motion 进一步降级。
 - 玻璃破碎节奏集中在 `src/config/glassTiming.ts`：新词先保留约 300—460ms 完整阅读窗口；之后的受力、裂纹、断裂、弹开和悬停阶段，电话/灶台约 800ms、纳凉约 680ms、结尾约 1100ms，reduced-motion 约 450ms。
 - 开发模式提供可折叠的时间轴检查面板，可暂停、拖动到 0/200/400/600/稳定帧；生产构建中不会显示。
 - 碎片预算：桌面普通章节 180 片、纳凉 200 片；移动端普通章节 96 片、纳凉 108 片；reduced-motion 再降至桌面 96 片、移动端 54 片。位移分为近距（0.05—0.15F）、中距（0.25—0.60F）与远距（0.65—1.10F）三组。
@@ -42,29 +42,30 @@ src/
   content/terms.ts           17 个词条与全部转写/解释内容
   content/scenes.ts          章节、首屏、结尾与作品说明文案
   config/glassTiming.ts      玻璃破碎分段时间、声音起音阈值与章节速度
-  audio/NarrativeAudio.ts    Web Audio 环境声与声音降级
+  audio/NarrativeAudio.ts    真实录音播放、Web Audio 环境声与声音降级
   hooks/useMicRecorder.ts    麦克风跟读、音量/节奏分析与临时录音
   components/SoundTextCanvas.tsx
   components/StoryScene.tsx
   components/AboutScene.tsx
-public/audio/                 可替换的授权音频素材目录
+public/audio/mother/          17 条家庭录音的主句与解释分段
 .github/workflows/deploy.yml GitHub Pages 部署工作流
 ```
 
-当前没有真实亲属录音。母亲声音由浏览器中文语音合成叠加 Web Audio 占位声纹构成，环境声全部由 Web Audio 生成；它们不会被描述为真实母亲录音。
+当前已接入项目提供的 17 条家庭录音。每条原始录音按中间停顿拆成主句与补充解释两段，处理为单声道 AAC，并通过 `audioSrc` / `supplementAudioSrc` 接入词条；环境声仍由 Web Audio 实时生成。
 
-## 替换真实录音
+## 录音素材
 
-素材说明见 `public/audio/README.md`。在 `src/content/terms.ts` 对应词条中补充：
+项目现有 17 条母亲录音，对应 `call-01` 至 `cooling-06`。原始文件每条都包含“主句 + 停顿 + 补充解释”，构建仓库中使用的是已分段、单声道、96 kbps AAC 的网页版本：
 
-```ts
-audioSrc: 'audio/call-01.mp3'
-```
+- `public/audio/mother/<id>-main.m4a`：进入词条时播放的主句。
+- `public/audio/mother/<id>-supplement.m4a`：点击“请母亲解释”时播放的补充解释。
+- `public/audio/mother/manifest.json`：原始时长、分段点与输出音频时长记录。
 
-路径相对于站点 `base`。真实录音应只使用本人明确授权、允许公开的本地文件。方言转写应同时由家庭成员确认，展示内容不应把任何写法视为常州话标准答案。
+词条通过 `src/content/terms.ts` 中的 `audioSrc` 与 `supplementAudioSrc` 引用录音。素材说明与替换规则见 `public/audio/README.md`。
 
-词条的素材确认状态保留在数据字段 `transcriptStatus` 中，不显示在普通观众界面。
+真实录音只应使用本人明确授权、允许公开的本地文件。录音中若有自然改口，方言转写应同时由家庭成员最终确认，展示内容不应把任何写法视为常州话标准答案。
 
+词条的素材状态保留在 `transcriptStatus` 中，不显示在普通观众界面。
 ## 麦克风与隐私
 
 - 页面加载和 intro 不申请麦克风。

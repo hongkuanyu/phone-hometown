@@ -12,6 +12,7 @@ import { useCallTimer } from './hooks/useCallTimer'
 import { useReducedMotion } from './hooks/useReducedMotion'
 import type { VoiceClip } from './hooks/useMicRecorder'
 import type {
+  AudioPlaybackResult,
   Choice,
   MicPermission,
   PlaybackRate,
@@ -220,28 +221,43 @@ function App() {
   }, [])
 
   const playTerm = useCallback(
-    (term: StoryTerm, rate = 1, manual = false) => {
-      if (!audioUnlocked) return
+    async (
+      term: StoryTerm,
+      rate = 1,
+      manual = false,
+    ): Promise<AudioPlaybackResult> => {
+      if (!audioUnlocked) return { kind: 'placeholder', durationMs: 0 }
       if (audioPaused) {
-        if (!manual) return
+        if (!manual) return { kind: 'placeholder', durationMs: 0 }
         setAudioPaused(false)
         audio.setPaused(false)
       }
-      void audio.playTerm(term, rate)
       duckTemporarily('voice', 7600)
+      const result = await audio.playTerm(term, rate)
+      if (result.durationMs > 0) {
+        duckTemporarily('voice', result.durationMs + 450)
+      }
+      return result
     },
     [audio, audioPaused, audioUnlocked, duckTemporarily],
   )
 
   const explainTerm = useCallback(
-    (term: StoryTerm) => {
-      if (!audioUnlocked) return
+    async (term: StoryTerm): Promise<AudioPlaybackResult> => {
+      if (!audioUnlocked) return { kind: 'placeholder', durationMs: 0 }
       if (audioPaused) {
         setAudioPaused(false)
         audio.setPaused(false)
       }
-      audio.playHint(term.supplement, (term.voiceRate ?? 1) * playbackRate * 0.92)
       duckTemporarily('explain', 10000)
+      const result = await audio.playSupplement(
+        term,
+        (term.voiceRate ?? 1) * playbackRate,
+      )
+      if (result.durationMs > 0) {
+        duckTemporarily('explain', result.durationMs + 450)
+      }
+      return result
     },
     [audio, audioPaused, audioUnlocked, duckTemporarily, playbackRate],
   )
