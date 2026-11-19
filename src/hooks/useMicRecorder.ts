@@ -8,6 +8,8 @@ export type FollowStatus =
   | 'listening'
   | 'fallback'
 
+export type FollowSource = 'voice' | 'rhythm' | 'silent'
+
 export interface VoiceClip {
   blob: Blob
   url: string
@@ -15,12 +17,22 @@ export interface VoiceClip {
   createdAt: number
 }
 
-interface UseMicRecorderOptions {
-  onPermission?: (permission: MicPermission) => void
-  onClip?: (clip: VoiceClip) => void
+export interface FollowOutcome {
+  source: FollowSource
+  duration: number
+  peakEnergy: number
+  clip?: VoiceClip
 }
 
+interface UseMicRecorderOptions {
+  onPermission?: (permission: MicPermission) => void
+  onComplete?: (outcome: FollowOutcome) => void
+}
+
+type CaptureMode = 'recorder' | 'analyser' | 'fallback' | null
+
 const MAX_RECORDING_MS = 5000
+const VOICE_THRESHOLD = 0.022
 
 /**
  * Microphone use is deliberately narrow: RMS volume and rhythm only.
@@ -28,13 +40,16 @@ const MAX_RECORDING_MS = 5000
  */
 export function useMicRecorder({
   onPermission,
-  onClip,
+  onComplete,
 }: UseMicRecorderOptions = {}) {
   const [permission, setPermission] = useState<MicPermission>('unknown')
   const [status, setStatus] = useState<FollowStatus>('idle')
   const [energy, setEnergy] = useState(0)
+  const [voiceDetected, setVoiceDetected] = useState(false)
+  const [lastOutcome, setLastOutcome] = useState<FollowSource | null>(null)
   const permissionRef = useRef<MicPermission>('unknown')
   const holdingRef = useRef(false)
+  const captureModeRef = useRef<CaptureMode>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -43,13 +58,15 @@ export function useMicRecorder({
   const rafRef = useRef<number | null>(null)
   const timeoutRef = useRef<number | null>(null)
   const startedAtRef = useRef(0)
+  const peakEnergyRef = useRef(0)
+  const hadVoiceRef = useRef(false)
   const onPermissionRef = useRef(onPermission)
-  const onClipRef = useRef(onClip)
+  const onCompleteRef = useRef(onComplete)
 
   useEffect(() => {
     onPermissionRef.current = onPermission
-    onClipRef.current = onClip
-  }, [onClip, onPermission])
+    onCompleteRef.current = onComplete
+  }, [onComplete, onPermission])
 
   const updatePermission = useCallback((next: MicPermission) => {
     permissionRef.current = next
@@ -70,41 +87,77 @@ export function useMicRecorder({
     }
     contextRef.current = null
     setEnergy(0)
+    setVoiceDetected(false)
   }, [])
 
+  const finish = useCallback(
+    (source: FollowSource, duration: number, clip?: VoiceClip) => {
+      captureModeRef.current = null
+      setLastOutcome(source)
+      setStatus('idle')
+      onCompleteRef.current?.({
+        source,
+        duration,
+        peakEnergy: peakEnergyRef.current,
+        clip,
+      })
+    },
+    [],
+  )
+
   const stopHold = useCallback(() => {
+    if (!holdingRef.current && captureModeRef.current === null) return
     holdingRef.current = false
-    const recorder = recorderRef.current
+    const mode = captureModeRef.current
+    captureModeRef.current = null
     const duration = Math.min(
       MAX_RECORDING_MS,
       Math.max(0, performance.now() - startedAtRef.current),
     )
+    const recorder = recorderRef.current
 
-    if (recorder && recorder.state !== 'inactive') {
+    if (mode === 'recorder' && recorder && recorder.state !== 'inactive') {
       recorder.onstop = () => {
         const type = recorder.mimeType || 'audio/webm'
         const blob = new Blob(chunksRef.current, { type })
         chunksRef.current = []
-        if (blob.size > 0) {
-          onClipRef.current?.({
-            blob,
-            url: URL.createObjectURL(blob),
-            duration,
-            createdAt: Date.now(),
-          })
-        }
         recorderRef.current = null
+        if (hadVoiceRef.current) {
+          const clip =
+            blob.size > 0
+              ? {
+                  blob,
+                  url: URL.createObjectURL(blob),
+                  duration,
+                  createdAt: Date.now(),
+                }
+              : undefined
+          cleanupResources()
+          finish('voice', duration, clip)
+          return
+        }
         cleanupResources()
-        setStatus('idle')
+        finish('silent', duration)
       }
       recorder.stop()
       return
     }
 
-    recorderRef.current = null
+    if (mode === 'fallback') {
+      cleanupResources()
+      finish('rhythm', duration)
+      return
+    }
+
+    if (mode === 'analyser') {
+      cleanupResources()
+      finish(hadVoiceRef.current ? 'voice' : 'silent', duration)
+      return
+    }
+
     cleanupResources()
     setStatus('idle')
-  }, [cleanupResources])
+  }, [cleanupResources, finish])
 
   const startAnalyser = useCallback((stream: MediaStream) => {
     const AudioContextClass =
@@ -120,7 +173,7 @@ export function useMicRecorder({
     const source = context.createMediaStreamSource(stream)
     const analyser = context.createAnalyser()
     analyser.fftSize = 512
-    analyser.smoothingTimeConstant = 0.78
+    analyser.smoothingTimeConstant = 0.72
     source.connect(analyser)
     contextRef.current = context
     analyserRef.current = analyser
@@ -135,15 +188,28 @@ export function useMicRecorder({
         sum += value * value
       }
       const rms = Math.sqrt(sum / data.length)
-      setEnergy(Math.min(1, rms * 4.5))
+      if (rms > VOICE_THRESHOLD) {
+        hadVoiceRef.current = true
+        const normalized = Math.min(1, rms * 4.5)
+        peakEnergyRef.current = Math.max(peakEnergyRef.current, normalized)
+        setVoiceDetected(true)
+        setEnergy(normalized)
+      } else {
+        setEnergy(0)
+      }
       rafRef.current = requestAnimationFrame(tick)
     }
     tick()
   }, [])
+
   const startFallback = useCallback(() => {
     if (!holdingRef.current) return
+    captureModeRef.current = 'fallback'
     startedAtRef.current = performance.now()
+    hadVoiceRef.current = false
+    peakEnergyRef.current = 0
     setStatus('fallback')
+    setVoiceDetected(false)
     const started = performance.now()
     const tick = () => {
       if (!holdingRef.current) return
@@ -159,7 +225,12 @@ export function useMicRecorder({
   const startHold = useCallback(async () => {
     if (holdingRef.current) return
     holdingRef.current = true
+    captureModeRef.current = null
+    hadVoiceRef.current = false
+    peakEnergyRef.current = 0
+    setLastOutcome(null)
     setStatus('requesting')
+    setVoiceDetected(false)
 
     if (permissionRef.current === 'denied') {
       startFallback()
@@ -194,6 +265,7 @@ export function useMicRecorder({
       if ('MediaRecorder' in window) {
         const recorder = new MediaRecorder(stream)
         recorderRef.current = recorder
+        captureModeRef.current = 'recorder'
         chunksRef.current = []
         recorder.ondataavailable = (event) => {
           if (event.data.size > 0) chunksRef.current.push(event.data)
@@ -201,6 +273,7 @@ export function useMicRecorder({
         recorder.start()
         setStatus('recording')
       } else {
+        captureModeRef.current = 'analyser'
         setStatus('listening')
       }
 
@@ -230,6 +303,8 @@ export function useMicRecorder({
     permission,
     status,
     energy,
+    voiceDetected,
+    lastOutcome,
     startHold,
     stopHold,
     isActive:

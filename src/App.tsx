@@ -18,6 +18,7 @@ import type {
   MicPermission,
   PlaybackRate,
   RecordedFragment,
+  RestorationSource,
   Scene,
   StoryScene as StorySceneName,
   StoryTerm,
@@ -35,6 +36,12 @@ const isPhoneActive = (scene: Scene) =>
 
 const addUnique = (values: string[], value: string) =>
   values.includes(value) ? values : [...values, value]
+
+const restorationPriority: Record<RestorationSource, number> = {
+  semantic: 1,
+  rhythm: 2,
+  voice: 3,
+}
 
 interface AboutReturn {
   scene: StorySceneName
@@ -55,7 +62,14 @@ function App() {
   const [subtitleVisible, setSubtitleVisible] = useState(false)
   const [translationOpen, setTranslationOpen] = useState(false)
   const [micPermission, setMicPermission] = useState<MicPermission>('unknown')
-  const [restoredTermIds, setRestoredTermIds] = useState<string[]>([])
+  const [restoredTermSources, setRestoredTermSources] = useState<
+    Record<string, RestorationSource>
+  >({})
+  const [rhythmTermIds, setRhythmTermIds] = useState<string[]>([])
+  const [wordGuideVisible, setWordGuideVisible] = useState(false)
+  const [followGuideVisible, setFollowGuideVisible] = useState(false)
+  const wordGuideSeenRef = useRef(false)
+  const followGuideSeenRef = useRef(false)
   const [skippedTermIds, setSkippedTermIds] = useState<string[]>([])
   const [explainedTermIds, setExplainedTermIds] = useState<string[]>([])
   const [inspectedTermIds, setInspectedTermIds] = useState<string[]>([])
@@ -118,6 +132,11 @@ function App() {
     setTermIndex(0)
     setChapterRun((value) => value + 1)
     setTranslationOpen(false)
+    setRestoredTermSources({})
+    wordGuideSeenRef.current = true
+    followGuideSeenRef.current = false
+    setWordGuideVisible(true)
+    setFollowGuideVisible(false)
     clearDuckTimers()
   }, [audio, clearDuckTimers])
 
@@ -133,13 +152,18 @@ function App() {
     setTranslationOpen(false)
     setSubtitleVisible(false)
     setAudioPaused(false)
-    setRestoredTermIds([])
+    setRestoredTermSources({})
+    setRhythmTermIds([])
     setSkippedTermIds([])
     setExplainedTermIds([])
     setInspectedTermIds([])
     setRecordedFragments([])
     setChoices([])
     setAboutReturn(null)
+    setWordGuideVisible(false)
+    setFollowGuideVisible(false)
+    wordGuideSeenRef.current = false
+    followGuideSeenRef.current = false
     setAudioUnlocked(false)
     callTimer.reset()
   }, [audio, callTimer, clearDuckTimers, resetFragmentUrls])
@@ -148,7 +172,8 @@ function App() {
     audio.stopVoice()
     resetFragmentUrls()
     clearDuckTimers()
-    setRestoredTermIds([])
+    setRestoredTermSources({})
+    setRhythmTermIds([])
     setSkippedTermIds([])
     setExplainedTermIds([])
     setInspectedTermIds([])
@@ -167,6 +192,11 @@ function App() {
     setScene('call')
     setTermIndex(0)
     setTranslationOpen(false)
+    setRestoredTermSources({})
+    wordGuideSeenRef.current = true
+    followGuideSeenRef.current = false
+    setWordGuideVisible(true)
+    setFollowGuideVisible(false)
   }, [audio, callTimer, clearDuckTimers, resetFragmentUrls])
 
   const openAbout = useCallback(() => {
@@ -217,9 +247,27 @@ function App() {
     }
   }, [])
 
-  const restore = useCallback((termId: string) => {
-    setRestoredTermIds((previous) => addUnique(previous, termId))
-  }, [])
+  const restore = useCallback(
+    (termId: string, source: RestorationSource) => {
+      if (source === 'rhythm') {
+        setRhythmTermIds((previous) => addUnique(previous, termId))
+      }
+      setRestoredTermSources((previous) => {
+        const existing = previous[termId]
+        if (
+          existing &&
+          restorationPriority[existing] >= restorationPriority[source]
+        ) {
+          return previous
+        }
+        return { ...previous, [termId]: source }
+      })
+    },
+    [],
+  )
+
+  const dismissWordGuide = useCallback(() => setWordGuideVisible(false), [])
+  const dismissFollowGuide = useCallback(() => setFollowGuideVisible(false), [])
 
   const getVoicePlayback = useCallback(
     () => audio.getVoicePlayback(),
@@ -287,6 +335,7 @@ function App() {
   )
 
   const openMeaning = useCallback(() => {
+    setWordGuideVisible(false)
     setTranslationOpen(true)
     duckFor('meaning', true)
   }, [duckFor])
@@ -319,7 +368,12 @@ function App() {
     setChapterRun((value) => value + 1)
     setTranslationOpen(false)
     setAudioPaused(false)
-    setRestoredTermIds((previous) => previous.filter((id) => !chapterTermIds.has(id)))
+    setRhythmTermIds((previous) => previous.filter((id) => !chapterTermIds.has(id)))
+    setRestoredTermSources((previous) =>
+      Object.fromEntries(
+        Object.entries(previous).filter(([id]) => !chapterTermIds.has(id)),
+      ) as Record<string, RestorationSource>,
+    )
     setSkippedTermIds((previous) => previous.filter((id) => !chapterTermIds.has(id)))
     setExplainedTermIds((previous) => previous.filter((id) => !chapterTermIds.has(id)))
     setInspectedTermIds((previous) => previous.filter((id) => !chapterTermIds.has(id)))
@@ -404,6 +458,10 @@ function App() {
   }, [audio, resetFragmentUrls])
 
   const advanceToCooling = useCallback(() => {
+    if (!followGuideSeenRef.current) {
+      followGuideSeenRef.current = true
+      setFollowGuideVisible(true)
+    }
     setScene('cooling')
     setTermIndex(0)
     setChapterRun((value) => value + 1)
@@ -454,6 +512,7 @@ function App() {
       data-choice-count={choices.length}
       data-mic-permission={micPermission}
       data-audio-state={audioPaused ? 'paused' : audioMuted ? 'muted' : 'playing'}
+      data-translation-open={translationOpen}
     >
       {scene === 'intro' && (
         <IntroScene onStart={() => void startStory()} onOpenAbout={openAbout} />
@@ -466,11 +525,15 @@ function App() {
           chapter={chapter}
           termIndex={termIndex}
           translationOpen={translationOpen}
-          restoredTermIds={restoredTermIds}
+          restoredTermSource={restoredTermSources[chapter.terms[termIndex].id]}
+          wordGuideVisible={wordGuideVisible}
+          followGuideVisible={followGuideVisible}
           skippedTermIds={skippedTermIds}
           explainedTermIds={explainedTermIds}
           getVoicePlayback={getVoicePlayback}
           onFollowActiveChange={setFollowListening}
+          onDismissWordGuide={dismissWordGuide}
+          onDismissFollowGuide={dismissFollowGuide}
           onRestartChapter={restartChapter}
           onAdvance={advance}
           onPlayTerm={playTerm}
@@ -491,7 +554,7 @@ function App() {
       {scene === 'ending' && (
         <EndingScene
           {...sharedPhoneProps}
-          restoredTermIds={restoredTermIds}
+          restoredTermSources={restoredTermSources}
           skippedTermIds={skippedTermIds}
           inspectedTermIds={inspectedTermIds}
           onComplete={openArchiveFromEnding}
@@ -501,6 +564,7 @@ function App() {
       {scene === 'about' && (
         <AboutScene
           fragments={recordedFragments}
+          rhythmRestoredCount={rhythmTermIds.length}
           pathSummary={pathSummary}
           canReturn={aboutReturn !== null}
           onReturn={returnFromAbout}

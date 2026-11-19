@@ -1,3 +1,4 @@
+import { siteConfig } from '../config/site'
 import { introCopy } from '../content/scenes'
 import { callTerms } from '../content/terms'
 import { GlassPrewarm } from './SoundTextCanvas'
@@ -48,9 +49,12 @@ export function IntroScene({ onStart, onOpenAbout }: IntroSceneProps) {
       <section className="intro-content" aria-labelledby="intro-title">
         <p className="intro-kicker">{introCopy.duration}</p>
         <h1 id="intro-title">
-          她在电话里
-          <br />
-          回到故乡
+          {siteConfig.titleLines.map((line, index) => (
+            <span key={line}>
+              {line}
+              {index < siteConfig.titleLines.length - 1 && <br />}
+            </span>
+          ))}
         </h1>
         <p className="intro-subtitle">
           一个不会说常州话的年轻人，
@@ -61,9 +65,6 @@ export function IntroScene({ onStart, onOpenAbout }: IntroSceneProps) {
         <div className="intro-actions">
           <button type="button" className="primary-button" onClick={onStart}>
             {introCopy.answer}
-          </button>
-          <button type="button" className="text-button" onClick={onStart}>
-            {introCopy.skip}
           </button>
         </div>
 

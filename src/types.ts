@@ -11,6 +11,7 @@ export type StoryScene = 'call' | 'stove' | 'cooling'
 export type AmbientMode = 'none' | 'phone' | 'kitchen' | 'night'
 export type MicPermission = 'unknown' | 'granted' | 'denied' | 'unsupported'
 export type PlaybackRate = 0.85 | 1 | 1.15
+export type RestorationSource = 'semantic' | 'rhythm' | 'voice'
 
 export interface StoryTerm {
   id: string

@@ -53,7 +53,7 @@ export function MeaningDrawer({ term, explained, onClose }: MeaningDrawerProps) 
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="meaning-drawer__header">
-          <span className="meaning-drawer__kicker">词义抽屉</span>
+          <span className="meaning-drawer__kicker">这句话</span>
           <button
             ref={closeRef}
             type="button"
@@ -66,38 +66,38 @@ export function MeaningDrawer({ term, explained, onClose }: MeaningDrawerProps) 
         </div>
 
         <h2 id="meaning-title">{term.display}</h2>
-        <p id="meaning-summary" className="meaning-drawer__family">
-          {term.familyText}
+        <p id="meaning-summary" className="meaning-drawer__meaning">
+          {term.mandarinHint}
         </p>
 
-        <dl className="meaning-list">
-          <div>
-            <dt>近似读音</dt>
-            <dd>{term.pronunciation}</dd>
-          </div>
-          <div>
-            <dt>家庭转写</dt>
-            <dd>{term.familyText}</dd>
-          </div>
-          <div>
-            <dt>这句话的生活意思</dt>
-            <dd>{term.mandarinHint}</dd>
-          </div>
-          <div>
-            <dt>生活场景</dt>
-            <dd>{term.context}</dd>
-          </div>
-          {explained && (
+        <section className="meaning-scene" aria-labelledby="meaning-scene-title">
+          <h3 id="meaning-scene-title">生活里</h3>
+          <p>{term.context}</p>
+        </section>
+
+        {explained && (
+          <p className="meaning-drawer__supplement">
+            <span>母亲又说</span>
+            {term.supplement}
+          </p>
+        )}
+
+        <details className="meaning-more">
+          <summary>展开更多</summary>
+          <dl className="meaning-list">
             <div>
-              <dt>母亲又补充了一句</dt>
-              <dd>{term.supplement}</dd>
+              <dt>近似读音</dt>
+              <dd>{term.pronunciation}</dd>
             </div>
-          )}
-        </dl>
-
-        <p className="meaning-drawer__footnote">
-          写法与读音来自家庭记忆中的地方表达，不代替真实录音。
-        </p>
+            <div>
+              <dt>家庭转写</dt>
+              <dd>{term.familyText}</dd>
+            </div>
+          </dl>
+          <p className="meaning-drawer__footnote">
+            写法与读音来自家庭记忆中的地方表达，不代替真实录音。
+          </p>
+        </details>
       </aside>
     </div>
   )

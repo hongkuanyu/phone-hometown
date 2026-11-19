@@ -4,12 +4,13 @@ import type {
   Choice,
   MicPermission,
   PlaybackRate,
+  RestorationSource,
   StoryChapter,
   StoryTerm,
   VoicePlaybackSnapshot,
 } from '../types'
 import { useMicRecorder } from '../hooks/useMicRecorder'
-import type { VoiceClip } from '../hooks/useMicRecorder'
+import type { FollowOutcome, VoiceClip } from '../hooks/useMicRecorder'
 import { MeaningDrawer } from './MeaningDrawer'
 import { PhoneChrome } from './PhoneChrome'
 import { SoundTextCanvas } from './SoundTextCanvas'
@@ -23,7 +24,9 @@ interface StorySceneProps {
   audioPaused: boolean
   subtitleVisible: boolean
   translationOpen: boolean
-  restoredTermIds: string[]
+  restoredTermSource?: RestorationSource
+  wordGuideVisible: boolean
+  followGuideVisible: boolean
   skippedTermIds: string[]
   explainedTermIds: string[]
   reducedMotion: boolean
@@ -32,6 +35,8 @@ interface StorySceneProps {
   voiceVolume: number
   getVoicePlayback: () => VoicePlaybackSnapshot
   onFollowActiveChange: (active: boolean) => void
+  onDismissWordGuide: () => void
+  onDismissFollowGuide: () => void
   onToggleAudio: () => void
   onTogglePause: () => void
   onToggleSubtitles: () => void
@@ -49,18 +54,61 @@ interface StorySceneProps {
   onExplain: (term: StoryTerm) => Promise<AudioPlaybackResult>
   onOpenMeaning: () => void
   onCloseMeaning: () => void
-  onRestore: (termId: string) => void
+  onRestore: (termId: string, source: RestorationSource) => void
   onSaveClip: (term: StoryTerm, clip: VoiceClip) => void
   onMicPermission: (permission: MicPermission) => void
   onChoice: (choice: Choice) => void
 }
 
-const followStatusCopy = {
-  idle: '最长 5 秒 · 松开结束',
-  requesting: '正在等待麦克风权限',
-  recording: '正在记录你的节奏 · 松开结束',
-  listening: '麦克风已开启 · 当前浏览器不能保存录音',
-  fallback: '节奏替代模式 · 没有使用麦克风',
+function SceneGuide({
+  visible,
+  text,
+  onDismiss,
+}: {
+  visible: boolean
+  text: string
+  onDismiss: () => void
+}) {
+  const guideRef = useRef<HTMLDivElement>(null)
+  const [hasEnteredViewport, setHasEnteredViewport] = useState(false)
+
+  useEffect(() => {
+    if (!visible) return
+    const node = guideRef.current
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setHasEnteredViewport(true)
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setHasEnteredViewport(true)
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.25 },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [visible])
+
+  useEffect(() => {
+    if (!visible || !hasEnteredViewport) return
+    const timer = window.setTimeout(onDismiss, 9000)
+    return () => window.clearTimeout(timer)
+  }, [hasEnteredViewport, onDismiss, visible])
+
+  return (
+    <div
+      ref={guideRef}
+      className={`scene-guide ${visible ? 'is-visible' : 'is-hidden'}`}
+      aria-live="polite"
+      aria-hidden={!visible}
+    >
+      <p>{visible ? text : '\u00a0'}</p>
+    </div>
+  )
 }
 
 export function StoryScene({
@@ -72,7 +120,9 @@ export function StoryScene({
   audioPaused,
   subtitleVisible,
   translationOpen,
-  restoredTermIds,
+  restoredTermSource,
+  wordGuideVisible,
+  followGuideVisible,
   skippedTermIds,
   explainedTermIds,
   reducedMotion,
@@ -81,6 +131,8 @@ export function StoryScene({
   voiceVolume,
   getVoicePlayback,
   onFollowActiveChange,
+  onDismissWordGuide,
+  onDismissFollowGuide,
   onToggleAudio,
   onTogglePause,
   onToggleSubtitles,
@@ -105,7 +157,10 @@ export function StoryScene({
   const [speakingDuration, setSpeakingDuration] = useState(6800)
   const [speakingTick, setSpeakingTick] = useState(0)
   const [departingTermId, setDepartingTermId] = useState<string | null>(null)
-  const [quickCapture, setQuickCapture] = useState(false)
+  const [followFeedback, setFollowFeedback] = useState<{
+    kind: 'voice' | 'rhythm' | 'silent'
+    text: string
+  } | null>(null)
   const [playbackInfo, setPlaybackInfo] = useState<{
     termId: string
     kind: 'recording' | 'placeholder'
@@ -115,25 +170,61 @@ export function StoryScene({
   const termRef = useRef(term)
   const playedRef = useRef('')
   const exitTimerRef = useRef<number | null>(null)
+  const followPointerActiveRef = useRef(false)
   const playbackRequestRef = useRef(0)
   const meaningButtonRef = useRef<HTMLButtonElement>(null)
+  const meaningOriginRef = useRef<'button' | 'term'>('button')
+  const feedbackTimerRef = useRef<number | null>(null)
   const isCooling = chapter.scene === 'cooling'
-  const isRestored = restoredTermIds.includes(term.id)
+  const isRestored = Boolean(restoredTermSource)
   const isExplained = explainedTermIds.includes(term.id)
   const isSkipped = skippedTermIds.includes(term.id)
   const isDeparting = departingTermId === term.id
 
+  const showFollowFeedback = useCallback(
+    (outcome: FollowOutcome) => {
+      if (feedbackTimerRef.current !== null) {
+        window.clearTimeout(feedbackTimerRef.current)
+      }
+      const feedback =
+        outcome.source === 'voice'
+          ? { kind: 'voice' as const, text: '你留下了一笔。' }
+          : outcome.source === 'rhythm'
+            ? { kind: 'rhythm' as const, text: '这次节奏补回了一笔。' }
+            : {
+                kind: 'silent' as const,
+                text: '这次没有检测到声音。可以再按住试一次。',
+              }
+      setFollowFeedback(feedback)
+      feedbackTimerRef.current = window.setTimeout(
+        () => setFollowFeedback(null),
+        1800,
+      )
+    },
+    [],
+  )
+
   const mic = useMicRecorder({
     onPermission: onMicPermission,
-    onClip: (clip) => {
+    onComplete: (outcome) => {
       const activeTerm = termRef.current
-      onRestore(activeTerm.id)
-      onChoice({ scene: chapter.scene, type: 'save', termId: activeTerm.id })
-      onSaveClip(activeTerm, clip)
+      if (outcome.clip) onSaveClip(activeTerm, outcome.clip)
+      if (outcome.source === 'voice') {
+        onRestore(activeTerm.id, 'voice')
+        onChoice({
+          scene: chapter.scene,
+          type: outcome.clip ? 'save' : 'follow',
+          termId: activeTerm.id,
+        })
+      } else if (outcome.source === 'rhythm') {
+        onRestore(activeTerm.id, 'rhythm')
+        onChoice({ scene: chapter.scene, type: 'follow', termId: activeTerm.id })
+      }
+      showFollowFeedback(outcome)
+      onFollowActiveChange(false)
+      window.setTimeout(onDismissFollowGuide, 1800)
     },
   })
-  const micIsActive = mic.isActive
-  const micStopHold = mic.stopHold
 
   const markSpeaking = useCallback((duration = 6800) => {
     setSpeakingDuration(reducedMotion ? Math.min(duration, 2800) : duration)
@@ -149,7 +240,13 @@ export function StoryScene({
 
   useEffect(() => {
     termRef.current = term
-    if (audioMuted || audioPaused) return
+    if (audioMuted) {
+      // Muting stops the voice instance. Clear the guard so enabling sound
+      // starts the current term again instead of leaving a silent final frame.
+      playedRef.current = ''
+      return
+    }
+    if (audioPaused) return
     if (playedRef.current === term.id) return
     playedRef.current = term.id
     const requestId = ++playbackRequestRef.current
@@ -173,6 +270,9 @@ export function StoryScene({
   useEffect(() => {
     return () => {
       if (exitTimerRef.current !== null) window.clearTimeout(exitTimerRef.current)
+      if (feedbackTimerRef.current !== null) {
+        window.clearTimeout(feedbackTimerRef.current)
+      }
       onFollowActiveChange(false)
     }
   }, [onFollowActiveChange])
@@ -195,10 +295,6 @@ export function StoryScene({
     const handleKeyUp = (event: KeyboardEvent) => {
       if (event.code !== 'Space' || isInteractiveTarget(event.target)) return
       event.preventDefault()
-      if (mic.isActive) {
-        onRestore(termRef.current.id)
-        onChoice({ scene: chapter.scene, type: 'follow', termId: termRef.current.id })
-      }
       onFollowActiveChange(false)
       mic.stopHold()
     }
@@ -209,7 +305,7 @@ export function StoryScene({
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [chapter.scene, isCooling, mic, onChoice, onFollowActiveChange, onRestore])
+  }, [chapter.scene, isCooling, mic, onFollowActiveChange])
   const replay = () => {
     onChoice({ scene: chapter.scene, type: 'replay', termId: term.id })
     setPulse((value) => value + 1)
@@ -235,7 +331,7 @@ export function StoryScene({
     setPulse((value) => value + 1)
     const requestId = ++playbackRequestRef.current
     markSpeaking(9000 / playbackRate)
-    onRestore(term.id)
+    onRestore(term.id, 'semantic')
     void onExplain(term).then((result) => {
       if (requestId === playbackRequestRef.current) {
         setPlaybackInfo({ termId: term.id, kind: result.kind })
@@ -249,18 +345,27 @@ export function StoryScene({
     })
   }
 
-  const openMeaning = () => {
+  const openMeaning = (origin: 'button' | 'term' = 'button') => {
+    meaningOriginRef.current = origin
     onChoice({ scene: chapter.scene, type: 'meaning', termId: term.id })
+    onRestore(term.id, 'semantic')
+    onDismissWordGuide()
     onOpenMeaning()
   }
 
   const closeMeaning = useCallback(() => {
     onCloseMeaning()
-    window.requestAnimationFrame(() => meaningButtonRef.current?.focus())
+    window.requestAnimationFrame(() => {
+      if (meaningOriginRef.current === 'term') {
+        document.querySelector<HTMLElement>('.sound-field__term-hitarea')?.focus()
+      } else {
+        meaningButtonRef.current?.focus()
+      }
+    })
   }, [onCloseMeaning])
 
-  const leaveWithChoice = (type: 'skip' | 'pretend') => {
-    onChoice({ scene: chapter.scene, type, termId: term.id })
+  const leaveWithChoice = () => {
+    onChoice({ scene: chapter.scene, type: 'skip', termId: term.id })
     setDepartingTermId(term.id)
     if (exitTimerRef.current !== null) window.clearTimeout(exitTimerRef.current)
     exitTimerRef.current = window.setTimeout(
@@ -277,32 +382,8 @@ export function StoryScene({
     void mic.startHold()
   }
 
-  const startQuickCapture = () => {
-    if (mic.isActive) return
-    setQuickCapture(true)
-    onFollowActiveChange(true)
-    void mic.startHold()
-  }
-
-  useEffect(() => {
-    if (!quickCapture || !micIsActive) return
-    const timer = window.setTimeout(() => {
-      if (micIsActive) {
-        onRestore(termRef.current.id)
-        onChoice({ scene: chapter.scene, type: 'follow', termId: termRef.current.id })
-      }
-      onFollowActiveChange(false)
-      micStopHold()
-      setQuickCapture(false)
-    }, 2800)
-    return () => window.clearTimeout(timer)
-  }, [chapter.scene, micIsActive, micStopHold, onChoice, onFollowActiveChange, onRestore, quickCapture])
-
   const endFollow = () => {
-    if (mic.isActive) {
-      onRestore(term.id)
-      onChoice({ scene: chapter.scene, type: 'follow', termId: term.id })
-    }
+    followPointerActiveRef.current = false
     onFollowActiveChange(false)
     mic.stopHold()
   }
@@ -312,8 +393,23 @@ export function StoryScene({
   ) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return
     event.preventDefault()
+    followPointerActiveRef.current = true
     event.currentTarget.setPointerCapture(event.pointerId)
     beginFollow()
+  }
+
+  const handleFollowPointerMove = (
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => {
+    if (!followPointerActiveRef.current) return
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const edgeTolerance = 14
+    const outside =
+      event.clientX < bounds.left - edgeTolerance ||
+      event.clientX > bounds.right + edgeTolerance ||
+      event.clientY < bounds.top - edgeTolerance ||
+      event.clientY > bounds.bottom + edgeTolerance
+    if (outside) endFollow()
   }
 
   const handleFollowPointerUp = (
@@ -337,27 +433,56 @@ export function StoryScene({
     }
   }
 
-  const nextLabel =
-    termIndex === chapter.terms.length - 1 ? chapter.nextLabel : '听下一句'
+  const followGuideText =
+    mic.permission === 'denied' || mic.permission === 'unsupported'
+      ? '麦克风未启用：按住跟读，会用节奏补回一笔。'
+      : '按住跟读，你留下的声音会补回一笔。'
+  const guideText = wordGuideVisible && chapter.scene === 'call'
+    ? '字会跟着声音碎开。点开一个词，看看它在生活里的意思。'
+    : ''
+  const activeRestorationSource = mic.isActive
+    ? mic.status === 'fallback'
+      ? 'rhythm'
+      : 'voice'
+    : restoredTermSource
   const followCopy =
-    mic.permission === 'denied' && mic.status === 'idle'
-      ? '麦克风未开启 · 按住仍可复原文字'
-      : followStatusCopy[mic.status]
+    followFeedback?.text ??
+    (mic.status === 'requesting'
+      ? '正在请求麦克风权限'
+      : mic.status === 'recording' || mic.status === 'listening'
+        ? mic.voiceDetected
+          ? '你的笔画正在接入'
+          : '正在听你的声音'
+        : mic.status === 'fallback'
+          ? mic.permission === 'denied'
+            ? '麦克风未开启 · 节奏替代中'
+            : '节奏替代模式 · 没有使用麦克风'
+          : mic.permission === 'denied'
+            ? '麦克风未开启 · 按住仍可用节奏补回'
+            : '按住跟读 · 最长 5 秒')
   const textState = mic.isActive
-    ? '你的笔画正在接入'
+    ? mic.status === 'fallback'
+      ? '节奏正在补回'
+      : mic.voiceDetected
+        ? '你的笔画正在接入'
+        : '正在听你的声音'
     : audioPaused
       ? '声音暂停 · 文字停在原处'
       : isSkipped
-      ? '没有追问 · 字停在碎裂里'
-      : isExplained
-        ? '补充解释 · 部分复原'
-        : isRestored
-          ? '部分复原 · 仍有错位'
-          : speaking && playbackKind === 'placeholder'
-            ? '录音缺失 · 演示节奏'
-            : speaking
-              ? '完整 · 受力 · 裂纹'
-              : '完整 · 裂纹 · 碎裂 · 悬停'
+        ? '没有追问 · 字停在碎裂里'
+        : isExplained
+          ? '补充解释 · 部分复原'
+          : isRestored
+            ? restoredTermSource === 'voice'
+              ? '声音补回 · 仍有错位'
+              : restoredTermSource === 'rhythm'
+                ? '节奏补回 · 仍有错位'
+                : '部分复原 · 仍有错位'
+            : speaking && playbackKind === 'placeholder'
+              ? '录音缺失 · 演示节奏'
+              : speaking
+                ? '完整 · 受力 · 裂纹'
+                : '完整 · 裂纹 · 碎裂 · 悬停'
   return (
     <main
       className={`story-scene story-scene--${chapter.scene}`}
@@ -391,16 +516,33 @@ export function StoryScene({
             {textState}
           </span>
         </div>
+        <SceneGuide
+          visible={Boolean(guideText)}
+          text={guideText}
+          onDismiss={onDismissWordGuide}
+        />
 
         <SoundTextCanvas
           text={term.display}
           stateKey={term.id}
           replayToken={pulse}
           audioLevel={audioLevel}
-          restoration={Math.max(mic.energy, isRestored ? 0.32 : 0)}
+          restoration={Math.max(
+            mic.energy,
+            isRestored
+              ? restoredTermSource === 'voice'
+                ? 0.42
+                : restoredTermSource === 'rhythm'
+                  ? 0.28
+                  : 0.26
+              : 0,
+          )}
           reducedMotion={reducedMotion}
           speaking={speaking && !audioPaused && !audioMuted}
           restored={isRestored}
+          restorationSource={activeRestorationSource}
+          guideActive={wordGuideVisible && chapter.scene === 'call'}
+          onTermClick={() => openMeaning('term')}
           fragmentBias={isDeparting ? 0.55 : 0}
           chapter={chapter.scene}
           fractureMode="voice"
@@ -437,43 +579,46 @@ export function StoryScene({
           )}
 
           <div className="action-row">
-            <button type="button" className="quiet-button" onClick={replay}>
-              再听一遍
-            </button>
-            <button type="button" className="quiet-button" onClick={explain}>
-              请母亲解释
-            </button>
-            <button
-              ref={meaningButtonRef}
-              type="button"
-              className="quiet-button"
-              onClick={openMeaning}
-            >
-              查看意思
-            </button>
-            {isCooling && (
+            <div className="action-row__secondary">
               <button
                 type="button"
-                className="quiet-button"
-                onClick={() => leaveWithChoice('pretend')}
+                className="quiet-button action-button--strong"
+                onClick={replay}
               >
-                装作听懂
+                再听一遍
               </button>
-            )}
-            <button
-              type="button"
-              className="quiet-button"
-              onClick={() => leaveWithChoice('skip')}
-            >
-              先跳过
-            </button>
+              <button
+                type="button"
+                className="quiet-button action-button--strong"
+                onClick={explain}
+              >
+                听听她怎么说
+              </button>
+              <button
+                ref={meaningButtonRef}
+                type="button"
+                className="quiet-button action-button--strong"
+                onClick={() => openMeaning('button')}
+              >
+                看这句话
+              </button>
+            </div>
+            <div className="action-row__weak">
+              <button
+                type="button"
+                className="quiet-button action-button--weak"
+                onClick={leaveWithChoice}
+              >
+                让这句话过去
+              </button>
+            </div>
             <button
               type="button"
               className="primary-button primary-button--small"
               onClick={onAdvance}
               disabled={isDeparting}
             >
-              {nextLabel}
+              继续通话
             </button>
           </div>
           <p className="sr-only" aria-live="polite">
@@ -482,14 +627,25 @@ export function StoryScene({
         </section>
 
         {isCooling && (
-          <section className={`follow-panel ${mic.isActive ? 'is-active' : ''}`}>
-            <p className="follow-panel__title">按住跟读，松开后留进声音档案</p>
+          <section
+            className={`follow-panel ${mic.isActive ? 'is-active' : ''} ${
+              followFeedback ? `feedback-${followFeedback.kind}` : ''
+            }`}
+          >
+            <SceneGuide
+              visible={followGuideVisible}
+              text={followGuideText}
+              onDismiss={onDismissFollowGuide}
+            />
+            <p className="follow-panel__title">按住跟读，补回一笔</p>
             <button
               type="button"
               className="hold-button"
               onPointerDown={handleFollowPointerDown}
+              onPointerMove={handleFollowPointerMove}
               onPointerUp={handleFollowPointerUp}
               onPointerCancel={endFollow}
+              onLostPointerCapture={endFollow}
               onKeyDown={handleFollowKeyDown}
               onKeyUp={handleFollowKeyUp}
               onContextMenu={(event) => event.preventDefault()}
@@ -498,21 +654,15 @@ export function StoryScene({
               <span className="hold-button__ring" aria-hidden="true" />
               按住跟读
             </button>
-            <button
-              type="button"
-              className="quick-record-button"
-              onClick={startQuickCapture}
-              disabled={mic.isActive}
-              aria-pressed={quickCapture}
-            >
-              {quickCapture ? '正在录下这一句' : '录下这句话'}
-            </button>
             <p id="follow-help" className="follow-panel__status" aria-live="polite">
               {followCopy}
             </p>
             <p className="follow-panel__privacy">
-              按音量、起音、持续时间与节奏驱动文字；不识别、不评分、不上传。
+              不识别、不评分、不上传。录音只留在当前标签页。
             </p>
+            {followFeedback?.kind === 'voice' && (
+              <span className="follow-panel__trace" aria-hidden="true" />
+            )}
           </section>
         )}
       </footer>

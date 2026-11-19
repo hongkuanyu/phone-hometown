@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { siteConfig } from '../config/site'
 import { aboutCopy } from '../content/scenes'
+import { allTerms } from '../content/terms'
 import type { RecordedFragment } from '../types'
 
 interface PathSummary {
@@ -12,6 +14,7 @@ interface PathSummary {
 
 interface AboutSceneProps {
   fragments: RecordedFragment[]
+  rhythmRestoredCount: number
   pathSummary: PathSummary
   canReturn: boolean
   onReturn: () => void
@@ -24,8 +27,13 @@ const formatDuration = (milliseconds: number) => {
   return `${seconds.toFixed(1)} 秒`
 }
 
+const motherRecordingCount = new Set(
+  allTerms.filter((term) => term.audioSrc).map((term) => term.id),
+).size
+
 export function AboutScene({
   fragments,
+  rhythmRestoredCount,
   pathSummary,
   canReturn,
   onReturn,
@@ -60,10 +68,17 @@ export function AboutScene({
       .catch(() => setPlayingId(null))
   }
 
+  const credits = [
+    ['作者', siteConfig.credits.author],
+    ['学校', siteConfig.credits.school],
+    ['指导教师', siteConfig.credits.instructor],
+    ['版权', siteConfig.credits.copyright],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]))
+
   return (
     <main className="about-scene" aria-label={aboutCopy.aria}>
       <header className="about-header">
-        <p className="about-kicker">声音档案 · 仅限当前标签页</p>
+        <p className="about-kicker">作品信息 · 声音档案仅限当前标签页</p>
         <h1>{aboutCopy.title}</h1>
         <p className="about-lead">{aboutCopy.concept}</p>
       </header>
@@ -71,9 +86,19 @@ export function AboutScene({
       <div className="about-grid">
         <section className="archive-section" aria-labelledby="archive-title">
           <div className="section-heading">
-            <h2 id="archive-title">这次留下的片段</h2>
-            <span>{fragments.length.toString().padStart(2, '0')}</span>
+            <h2 id="archive-title">声音档案</h2>
           </div>
+
+          <dl className="archive-counts">
+            <div>
+              <dt>母亲留下的录音</dt>
+              <dd>{motherRecordingCount} 段</dd>
+            </div>
+            <div>
+              <dt>你本次留下的录音</dt>
+              <dd>{fragments.length} 段</dd>
+            </div>
+          </dl>
 
           {fragments.length === 0 ? (
             <p className="archive-empty">这次没有留下录音。沉默也是完整的。</p>
@@ -103,6 +128,11 @@ export function AboutScene({
             </ol>
           )}
 
+          {rhythmRestoredCount > 0 && (
+            <p className="archive-note archive-note--rhythm">
+              你用节奏补回了笔画，没有录音。
+            </p>
+          )}
           <p className="archive-note">
             录音不上传、不写入存储。关闭或刷新标签页后，档案自动消失。
           </p>
@@ -119,6 +149,22 @@ export function AboutScene({
         <section className="about-notes" aria-labelledby="notes-title">
           <h2 id="notes-title">关于这部作品</h2>
           <p>{aboutCopy.creation}</p>
+          <dl className="about-meta">
+            <div>
+              <dt>作品类型</dt>
+              <dd>{siteConfig.workType}</dd>
+            </div>
+            <div>
+              <dt>素材</dt>
+              <dd>{siteConfig.materials}</dd>
+            </div>
+            {credits.map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
           <details>
             <summary>家庭转写说明</summary>
             <p>{aboutCopy.transcript}</p>

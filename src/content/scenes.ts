@@ -1,14 +1,14 @@
+import { siteConfig } from '../config/site'
 import type { StoryChapter } from '../types'
 import { callTerms, coolingTerms, stoveTerms } from './terms'
 
 export const introCopy = {
-  title: '她在电话里回到故乡',
+  title: siteConfig.title,
   subtitle: '一个不会说常州话的年轻人，\n试图听懂母亲电话里的声音。',
   listening: '建议佩戴耳机',
-  duration: '约 6 分钟 · 声音会先抵达',
+  duration: siteConfig.durationLabel,
   privacy: '麦克风仅在主动跟读时启用，录音不会上传。',
   answer: '接听',
-  skip: '跳过说明，直接接听',
   about: '作品与声音说明',
 }
 
@@ -59,17 +59,22 @@ export const getChapter = (scene: StoryChapter['scene']): StoryChapter => chapte
 export const endingCopy = {
   title: '电话还没有挂断。',
   lead: '她还在和亲戚说话。你听见几个词，又把它们放回声音里。',
-  action: '走进声音档案',
+  echo: '听见几个词',
+  action: '看看留下了什么',
   unrecovered: '没有追问的字，仍然散在底噪里。',
   followed: '跟读留下的冷白笔画，没有把任何一句话变完整。',
+  rhythmFollowed: '节奏补回的暖灰笔画，没有把任何一句话变完整。',
+  semanticFollowed: '你看过一些解释，裂纹仍在原处。',
+  unparticipated: '你没有把声音留下。她的话也仍然停在电话里。',
   context: '看过解释的地方，留下了更长的回声。',
 }
 
 export const aboutCopy = {
-  title: '你留下的声音',
-  concept: '一个不会说常州话的年轻人，在母亲不断切换的方言里，靠近她的日常、记忆与过去。',
+  title: siteConfig.title,
+  concept:
+    '母亲说话时，文字形成裂纹、碎开；你能补回一部分，却无法替她把话说完。',
   creation:
-    '这是一段关于方言、亲情与“听懂一点”的作品。声音先于解释，遗漏也是叙事的一部分；它不判断谁更懂得故乡。',
+    '母亲说话时，文字逐渐形成裂纹、碎开。重听和追问让它们重新聚合；观众的声音只能补回其中一部分，无法替母亲把话说完。',
   transcript:
     '家庭转写依据录音脚本与家庭记忆整理，用词和语序保留地方表达。录音中若有自然改口，文字仍以家庭成员最终确认的版本为准。',
   collection:
@@ -77,8 +82,8 @@ export const aboutCopy = {
   authorization:
     '真实声音只使用本人明确同意公开的录音。当前录音仅用于本作品展示；未经同意的亲属录音、电话号码与私人对话不应进入仓库或线上页面。',
   permission:
-    '麦克风只在主动按住跟读或录制句子时申请。页面不上传、不持久化录音；片段只存在于当前标签页内存中。跟读只分析音量、起音、持续时间和节奏，不做语音识别或发音判断。',
+    '麦克风只在主动按住跟读时申请。页面不上传、不持久化录音；片段只存在于当前标签页内存中。跟读只分析音量、起音、持续时间和节奏，不做语音识别或发音判断。',
   technology:
     'React + TypeScript + Canvas + Web Audio API + MediaRecorder。母亲录音以单声道 AAC 接入；没有后端、第三方音频服务、语音识别、评分或账号系统。',
-  aria: '声音档案与作品说明',
+  aria: '作品信息与声音档案',
 }

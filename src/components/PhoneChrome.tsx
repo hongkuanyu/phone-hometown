@@ -51,21 +51,26 @@ export function PhoneChrome({
       </div>
 
       <div className="utility-controls">
-        <button
-          type="button"
-          className="utility-button"
-          aria-pressed={!audioMuted}
-          onClick={onToggleAudio}
+        <details
+          className="playback-settings sound-settings"
+          data-muted={audioMuted}
         >
-          声音：{audioMuted ? '关' : '开'}
-        </button>
-
-        <details className="playback-settings">
-          <summary className="utility-button playback-settings__summary">
-            播放设置
+          <summary
+            className="utility-button playback-settings__summary"
+            aria-label={`声音设置，当前声音${audioMuted ? '关闭' : '开启'}`}
+          >
+            声音
           </summary>
           <div className="playback-panel">
             <div className="playback-panel__actions">
+              <button
+                type="button"
+                className="panel-button"
+                aria-pressed={!audioMuted}
+                onClick={onToggleAudio}
+              >
+                {audioMuted ? '开启声音' : '关闭声音'}
+              </button>
               <button
                 type="button"
                 className="panel-button"
@@ -143,7 +148,7 @@ export function PhoneChrome({
           aria-pressed={subtitleVisible}
           onClick={onToggleSubtitles}
         >
-          普通话提示：{subtitleVisible ? '开' : '关'}
+          提示：{subtitleVisible ? '开' : '关'}
         </button>
         <button type="button" className="utility-button" onClick={onOpenAbout}>
           作品信息

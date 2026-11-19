@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react'
 import { endingCopy } from '../content/scenes'
 import { termById } from '../content/terms'
-import type { PlaybackRate } from '../types'
+import type { PlaybackRate, RestorationSource } from '../types'
 import { PhoneChrome } from './PhoneChrome'
 import { SoundTextCanvas } from './SoundTextCanvas'
 
@@ -14,7 +15,7 @@ interface EndingSceneProps {
   playbackRate: PlaybackRate
   ambientVolume: number
   voiceVolume: number
-  restoredTermIds: string[]
+  restoredTermSources: Record<string, RestorationSource>
   skippedTermIds: string[]
   inspectedTermIds: string[]
   onToggleAudio: () => void
@@ -37,7 +38,7 @@ export function EndingScene({
   playbackRate,
   ambientVolume,
   voiceVolume,
-  restoredTermIds,
+  restoredTermSources,
   skippedTermIds,
   inspectedTermIds,
   onToggleAudio,
@@ -49,25 +50,51 @@ export function EndingScene({
   onOpenAbout,
   onComplete,
 }: EndingSceneProps) {
-  const restoredTerms = restoredTermIds
-    .map((id) => termById.get(id))
-    .filter((term) => term !== undefined)
+  const [actionReady, setActionReady] = useState(false)
+  const restoredTermIds = Object.keys(restoredTermSources)
+  const restoredEntries = restoredTermIds.flatMap((id) => {
+    const term = termById.get(id)
+    return term ? [{ term, source: restoredTermSources[id] }] : []
+  })
+  const voiceRestoredTerms = restoredEntries.filter(
+    ({ source }) => source === 'voice',
+  )
+  const rhythmRestoredTerms = restoredEntries.filter(
+    ({ source }) => source === 'rhythm',
+  )
+  const semanticRestoredTerms = restoredEntries.filter(
+    ({ source }) => source === 'semantic',
+  )
+  const voiceRestoredCount = voiceRestoredTerms.length
+  const rhythmRestoredCount = rhythmRestoredTerms.length
+  const endingRestorationSource =
+    voiceRestoredCount > 0
+      ? 'voice'
+      : rhythmRestoredCount > 0
+        ? 'rhythm'
+        : undefined
+  const endingParticipationCopy =
+    voiceRestoredCount > 0
+      ? endingCopy.followed
+      : rhythmRestoredCount > 0
+        ? endingCopy.rhythmFollowed
+        : semanticRestoredTerms.length > 0
+          ? endingCopy.semanticFollowed
+          : endingCopy.unparticipated
   const skippedTerms = skippedTermIds
     .map((id) => termById.get(id))
     .filter((term) => term !== undefined)
   const inspectedTerms = inspectedTermIds
     .map((id) => termById.get(id))
     .filter((term) => term !== undefined)
-  const restoration = Math.max(
-    0.1,
-    Math.min(
-      0.58,
-      0.2 +
-        restoredTerms.length * 0.075 +
-        inspectedTerms.length * 0.025 -
-        skippedTerms.length * 0.035,
-    ),
-  )
+
+  useEffect(() => {
+    const timerId = window.setTimeout(
+      () => setActionReady(true),
+      reducedMotion ? 500 : 2200,
+    )
+    return () => window.clearTimeout(timerId)
+  }, [reducedMotion])
 
   return (
     <main className="ending-scene">
@@ -90,32 +117,51 @@ export function EndingScene({
       />
 
       <section className="ending-field">
-        <p className="ending-lead">{endingCopy.lead}</p>
-        <SoundTextCanvas
-          text={endingCopy.title}
-          stateKey="ending"
-          replayToken={0}
-          audioLevel={audioLevel}
-          restoration={restoration}
-          restored={restoredTerms.length > 0}
-          fragmentBias={skippedTerms.length > 2 ? 0.24 : 0}
-          reducedMotion={reducedMotion}
-          speaking={false}
-          chapter="ending"
-          fractureMode="timed"
-          labelPrefix="结尾文字"
-        />
-        <p className="ending-small">
-          {restoredTerms.length > 0
-            ? endingCopy.followed
-            : '你没有把声音留下。她的话也仍然停在电话里。'}
-        </p>
+        <p className="ending-lead ending-fade">{endingCopy.lead}</p>
+        <h1 className="ending-title">{endingCopy.title}</h1>
+        <div className="ending-fragment-field ending-fade" aria-hidden="true">
+          <SoundTextCanvas
+            text={endingCopy.echo}
+            stateKey="ending-fragments"
+            replayToken={0}
+            audioLevel={audioLevel}
+            restoration={
+              voiceRestoredCount > 0
+                ? 0.22
+                : rhythmRestoredCount > 0
+                  ? 0.14
+                  : 0.08
+            }
+            restored={endingRestorationSource !== undefined}
+            restorationSource={endingRestorationSource}
+            fragmentBias={skippedTerms.length > 2 ? 0.18 : 0}
+            reducedMotion={reducedMotion}
+            speaking={false}
+            chapter="ending"
+            fractureMode="timed"
+            layoutMode="horizontal"
+            labelPrefix="结尾周围的声音"
+          />
+        </div>
+        <p className="ending-small">{endingParticipationCopy}</p>
 
-        <div className="ending-traces" aria-label="这次体验留下的痕迹">
-          {restoredTerms.length > 0 && (
+        <div className="ending-traces ending-fade" aria-label="这次体验留下的痕迹">
+          {voiceRestoredTerms.length > 0 && (
             <p>
-              <span>跟读过的词</span>
-              {restoredTerms.slice(-4).map((term) => term?.display).join(' · ')}
+              <span>声音补回过的词</span>
+              {voiceRestoredTerms.slice(-4).map(({ term }) => term.display).join(' · ')}
+            </p>
+          )}
+          {rhythmRestoredTerms.length > 0 && (
+            <p>
+              <span>节奏补回过的词</span>
+              {rhythmRestoredTerms.slice(-4).map(({ term }) => term.display).join(' · ')}
+            </p>
+          )}
+          {semanticRestoredTerms.length > 0 && (
+            <p>
+              <span>看过解释的词</span>
+              {semanticRestoredTerms.slice(-4).map(({ term }) => term.display).join(' · ')}
             </p>
           )}
           {skippedTerms.length > 0 && (
@@ -134,10 +180,16 @@ export function EndingScene({
       </section>
 
       <footer className="ending-footer">
-        <p>她还在和亲戚说话。电话底噪慢慢盖过了解释。</p>
-        <button type="button" className="primary-button primary-button--small" onClick={onComplete}>
-          {endingCopy.action}
-        </button>
+        <p className="ending-fade">她还在和亲戚说话。电话底噪慢慢盖过了解释。</p>
+        {actionReady && (
+          <button
+            type="button"
+            className="primary-button primary-button--small"
+            onClick={onComplete}
+          >
+            {endingCopy.action}
+          </button>
+        )}
       </footer>
     </main>
   )
