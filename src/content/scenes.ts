@@ -4,9 +4,9 @@ import { callTerms, coolingTerms, stoveTerms } from './terms'
 
 export const prologueCopy = {
   sentences: [
-    '母亲在常州。',
+    '母亲是常州人。',
     '天气降温后，她打来电话，问你那边冷不冷。',
-    '你在外地，没有正式学过常州话。',
+    '你从小生活在常州，如今生活在外地，没有正式学过常州话。',
     '她说的很多话，你只能靠语气和几个熟悉的词去猜。',
   ],
   action: '继续',
