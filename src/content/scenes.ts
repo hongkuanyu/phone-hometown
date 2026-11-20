@@ -2,6 +2,14 @@ import { siteConfig } from '../config/site'
 import type { StoryChapter } from '../types'
 import { callTerms, coolingTerms, stoveTerms } from './terms'
 
+export const prologueCopy = {
+  title: '母亲在常州。',
+  weather: '天气降温后，她打来电话，问你那边冷不冷。',
+  distance:
+    '你在外地，没有正式学过常州话。她说的很多话，你只能靠语气和几个熟悉的词去猜。',
+  action: '继续',
+}
+
 export const introCopy = {
   title: siteConfig.title,
   subtitle: '一个不会说常州话的年轻人，\n试图听懂母亲电话里的声音。',

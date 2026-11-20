@@ -103,6 +103,85 @@ button { cursor: pointer; }
 
 .placeholder-label { color: #796f64; font-size: 0.68rem; line-height: 1.7; letter-spacing: 0.03em; }
 
+/* Prologue */
+.prologue-scene {
+  position: relative;
+  display: grid;
+  min-height: 100svh;
+  padding: clamp(1.5rem, 4vw, 4rem);
+  place-items: center;
+  overflow: hidden;
+}
+
+.prologue-content {
+  width: min(37rem, 86vw);
+  text-align: left;
+}
+
+.prologue-thread {
+  display: block;
+  width: 3.75rem;
+  height: 1px;
+  margin-bottom: 1.35rem;
+  background: linear-gradient(90deg, transparent, var(--color-mother) 18%, var(--color-mother) 76%, transparent);
+  opacity: 0.58;
+  transform-origin: left center;
+  animation: prologue-line-in 650ms cubic-bezier(0.2, 0.65, 0.2, 1) both;
+}
+
+.prologue-title {
+  color: var(--color-ink);
+  font-size: clamp(2.45rem, 5vw, 4.8rem);
+  font-weight: 500;
+  line-height: 1.12;
+  letter-spacing: 0.015em;
+  animation: prologue-fade-in 700ms ease 80ms both;
+}
+
+.prologue-copy {
+  margin-top: 1.45rem;
+}
+
+.prologue-copy p {
+  color: #b8afa1;
+  font-size: clamp(0.92rem, 1.25vw, 1.02rem);
+  line-height: 1.9;
+  letter-spacing: 0.035em;
+  animation: prologue-fade-in 700ms ease both;
+}
+
+.prologue-copy p:first-child { animation-delay: 220ms; }
+.prologue-copy p:last-child { margin-top: 0.85rem; animation-delay: 360ms; }
+
+.prologue-continue {
+  min-width: 5rem;
+  min-height: 2.75rem;
+  margin-top: 1.9rem;
+  padding: 0.45rem 0.1rem;
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  border: 0;
+  border-bottom: 1px solid var(--color-line);
+  background: transparent;
+}
+
+.prologue-continue:hover,
+.prologue-continue:active {
+  color: var(--color-ink);
+  border-bottom-color: var(--color-ink);
+}
+
+@keyframes prologue-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes prologue-line-in {
+  from { opacity: 0; transform: scaleX(0); }
+  to { opacity: 0.58; transform: scaleX(1); }
+}
+
 /* Intro */
 .intro-scene {
   position: relative;
@@ -749,6 +828,18 @@ button { cursor: pointer; }
   .about-grid { display: block; overflow: visible; }
   .about-notes { margin-top: 2.3rem; }
   .about-actions { justify-content: flex-start; margin-top: 1.5rem; }
+
+  .prologue-scene {
+    padding-top: max(1.4rem, env(safe-area-inset-top));
+    padding-right: max(1.4rem, env(safe-area-inset-right));
+    padding-bottom: max(1.4rem, env(safe-area-inset-bottom));
+    padding-left: max(1.4rem, env(safe-area-inset-left));
+  }
+
+  .prologue-content { width: min(31rem, 92vw); }
+  .prologue-title { font-size: clamp(2.2rem, 10vw, 3.4rem); }
+  .prologue-copy p { font-size: 0.88rem; line-height: 1.9; }
+  .prologue-continue { margin-top: 1.5rem; }
 
   .intro-scene {
     align-items: center;
@@ -1546,6 +1637,21 @@ button { cursor: pointer; }
   .about-header h1 { font-size: clamp(2rem, 7vw, 3rem); }
   .about-lead { margin-top: 0.5rem; font-size: 0.72rem; line-height: 1.5; }
 
+  .prologue-scene {
+    padding-top: 0.7rem;
+    padding-right: max(0.9rem, env(safe-area-inset-right));
+    padding-bottom: 0.7rem;
+    padding-left: max(0.9rem, env(safe-area-inset-left));
+  }
+
+  .prologue-content { width: min(34rem, 94vw); }
+  .prologue-thread { margin-bottom: 0.55rem; }
+  .prologue-title { font-size: clamp(1.65rem, 5vw, 2.4rem); }
+  .prologue-copy { margin-top: 0.55rem; }
+  .prologue-copy p { font-size: 0.7rem; line-height: 1.45; }
+  .prologue-copy p:last-child { margin-top: 0.25rem; }
+  .prologue-continue { min-height: 2.75rem; margin-top: 0.55rem; }
+
   .intro-scene {
     padding-top: 0.65rem;
     padding-right: max(1rem, env(safe-area-inset-right));
@@ -1620,6 +1726,9 @@ button { cursor: pointer; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .prologue-thread,
+  .prologue-title,
+  .prologue-copy p,
   .sound-field__term-hitarea.is-guided,
   .follow-panel__trace,
   .ending-fade,

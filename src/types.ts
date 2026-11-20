@@ -1,4 +1,5 @@
 export type Scene =
+  | 'prologue'
   | 'intro'
   | 'call'
   | 'stove'

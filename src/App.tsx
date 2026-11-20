@@ -5,6 +5,7 @@ import { GLASS_TIMING } from './config/glassTiming'
 import { AboutScene } from './components/AboutScene'
 import { EndingScene } from './components/EndingScene'
 import { IntroScene } from './components/IntroScene'
+import { PrologueScene } from './components/PrologueScene'
 import { StoryScene } from './components/StoryScene'
 import { TransitionScene } from './components/TransitionScene'
 import { getChapter } from './content/scenes'
@@ -51,7 +52,7 @@ interface AboutReturn {
 function App() {
   const [audio] = useState(() => new NarrativeAudio())
 
-  const [scene, setScene] = useState<Scene>('intro')
+  const [scene, setScene] = useState<Scene>('prologue')
   const [introHasPlayed, setIntroHasPlayed] = useState(false)
   const [termIndex, setTermIndex] = useState(0)
   const [chapterRun, setChapterRun] = useState(0)
@@ -123,6 +124,10 @@ function App() {
 
   const markIntroComplete = useCallback(() => {
     setIntroHasPlayed(true)
+  }, [])
+
+  const continueFromPrologue = useCallback(() => {
+    setScene('intro')
   }, [])
 
   const startStory = useCallback(async () => {
@@ -515,11 +520,16 @@ function App() {
     <div
       className="experience"
       style={themeStyle}
+      data-scene={scene}
       data-choice-count={choices.length}
       data-mic-permission={micPermission}
       data-audio-state={audioPaused ? 'paused' : audioMuted ? 'muted' : 'playing'}
       data-translation-open={translationOpen}
     >
+      {scene === 'prologue' && (
+        <PrologueScene onContinue={continueFromPrologue} />
+      )}
+
       {scene === 'intro' && (
         <IntroScene
           animateIntro={!introHasPlayed}
