@@ -31,6 +31,26 @@ const INTRO_TIMING = {
   aboutDuration: 700,
   assemblyDelay: 3000,
   assemblyDuration: 600,
+  reduced: {
+    total: 1100,
+    lineDraw: 420,
+    titleOneDelay: 40,
+    titleOneDuration: 520,
+    lineWaveDelay: 280,
+    lineWaveDuration: 420,
+    titleTwoDelay: 220,
+    titleTwoDuration: 520,
+    subtitleDelay: 460,
+    subtitleDuration: 380,
+    actionDelay: 520,
+    actionDuration: 380,
+    supportDelay: 650,
+    supportDuration: 320,
+    aboutDelay: 680,
+    aboutDuration: 420,
+    assemblyDelay: 720,
+    assemblyDuration: 380,
+  },
 } as const
 
 const canUseWebAnimations = () =>
@@ -44,7 +64,7 @@ export function IntroScene({
   onIntroComplete,
   onOpenAbout,
 }: IntroSceneProps) {
-  const shouldPlay = animateIntro && !reducedMotion && canUseWebAnimations()
+  const shouldPlay = animateIntro && canUseWebAnimations()
   const [isPlaying, setIsPlaying] = useState(shouldPlay)
   const [listenReady, setListenReady] = useState(!shouldPlay)
   const [secondaryReady, setSecondaryReady] = useState(!shouldPlay)
@@ -56,6 +76,7 @@ export function IntroScene({
   const listenButtonRef = useRef<HTMLButtonElement>(null)
   const skipButtonRef = useRef<HTMLButtonElement>(null)
   const pathRef = useRef<SVGPathElement>(null)
+  const tracerRef = useRef<SVGPathElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const kickerRef = useRef<HTMLParagraphElement>(null)
   const subtitleRef = useRef<HTMLParagraphElement>(null)
@@ -111,6 +132,7 @@ export function IntroScene({
       if (cancelled) return
       try {
         const path = pathRef.current
+        const tracer = tracerRef.current
         const titleLines = Array.from(
           titleRef.current?.querySelectorAll<HTMLElement>(
             '.intro-title__line',
@@ -125,6 +147,7 @@ export function IntroScene({
 
         if (
           !path ||
+          !tracer ||
           titleLines.length < 2 ||
           !kicker ||
           !subtitle ||
@@ -148,6 +171,9 @@ export function IntroScene({
           return animation
         }
 
+        const motion = reducedMotion ? INTRO_TIMING.reduced : INTRO_TIMING
+        const fullMotion = !reducedMotion
+
         animate(
           path,
           [
@@ -155,69 +181,95 @@ export function IntroScene({
             { opacity: 1, strokeDashoffset: 0 },
           ],
           {
-            duration: INTRO_TIMING.lineDraw,
+            duration: motion.lineDraw,
             easing: 'cubic-bezier(0.2, 0.65, 0.2, 1)',
             fill: 'both',
           },
         )
 
-        animate(
-          path,
-          [
-            { transform: 'translateY(0px) scaleY(1)' },
-            { transform: 'translateY(2.5px) scaleY(1.08)', offset: 0.46 },
-            { transform: 'translateY(-0.5px) scaleY(0.985)', offset: 0.72 },
-            { transform: 'translateY(0px) scaleY(1)' },
-          ],
-          {
-            delay: INTRO_TIMING.lineWaveDelay,
-            duration: INTRO_TIMING.lineWaveDuration,
-            easing: 'ease-in-out',
-            fill: 'both',
-          },
-        )
+        if (fullMotion) {
+          animate(
+            tracer,
+            [
+              { opacity: 0, strokeDashoffset: 1 },
+              { opacity: 0.48, strokeDashoffset: 0.82, offset: 0.12 },
+              { opacity: 0.56, strokeDashoffset: 0.18, offset: 0.7 },
+              { opacity: 0, strokeDashoffset: -0.18 },
+            ],
+            {
+              duration: 1000,
+              easing: 'linear',
+              fill: 'both',
+            },
+          )
+          animate(
+            path,
+            [
+              { transform: 'translateY(0px) scaleY(1)' },
+              {
+                transform: 'translateY(2.5px) scaleY(1.08)',
+                offset: 0.46,
+              },
+              {
+                transform: 'translateY(-0.5px) scaleY(0.985)',
+                offset: 0.72,
+              },
+              { transform: 'translateY(0px) scaleY(1)' },
+            ],
+            {
+              delay: motion.lineWaveDelay,
+              duration: motion.lineWaveDuration,
+              easing: 'ease-in-out',
+              fill: 'both',
+            },
+          )
+        }
 
-        const titleKeyframes: Keyframe[] = [
-          {
-            opacity: 0.04,
-            transform: 'translate3d(0, 12px, 0) scale(0.985)',
-            clipPath: 'inset(-6% 100% -6% 0)',
-          },
-          {
-            opacity: 0.82,
-            transform: 'translate3d(0, 3px, 0) scale(0.995)',
-            clipPath: 'inset(-6% 28% -6% 0)',
-            offset: 0.58,
-          },
-          {
-            opacity: 1,
-            transform: 'translate3d(0, 0, 0) scale(1)',
-            clipPath: 'inset(0)',
-          },
-        ]
+        const titleKeyframes: Keyframe[] = fullMotion
+          ? [
+              {
+                opacity: 0.04,
+                transform: 'translate3d(0, 12px, 0) scale(0.985)',
+                clipPath: 'inset(-6% 100% -6% 0)',
+              },
+              {
+                opacity: 0.82,
+                transform: 'translate3d(0, 3px, 0) scale(0.995)',
+                clipPath: 'inset(-6% 28% -6% 0)',
+                offset: 0.58,
+              },
+              {
+                opacity: 1,
+                transform: 'translate3d(0, 0, 0) scale(1)',
+                clipPath: 'inset(0)',
+              },
+            ]
+          : [{ opacity: 0 }, { opacity: 1 }]
 
         animate(titleLines[0], titleKeyframes, {
-          delay: INTRO_TIMING.titleOneDelay,
-          duration: INTRO_TIMING.titleOneDuration,
+          delay: motion.titleOneDelay,
+          duration: motion.titleOneDuration,
           easing: 'cubic-bezier(0.22, 0.72, 0.2, 1)',
           fill: 'both',
         })
         animate(titleLines[1], titleKeyframes, {
-          delay: INTRO_TIMING.titleTwoDelay,
-          duration: INTRO_TIMING.titleTwoDuration,
+          delay: motion.titleTwoDelay,
+          duration: motion.titleTwoDuration,
           easing: 'cubic-bezier(0.22, 0.72, 0.2, 1)',
           fill: 'both',
         })
 
         animate(
           subtitle,
-          [
-            { opacity: 0, transform: 'translate3d(0, 6px, 0)' },
-            { opacity: 1, transform: 'translate3d(0, 0, 0)' },
-          ],
+          fullMotion
+            ? [
+                { opacity: 0, transform: 'translate3d(0, 6px, 0)' },
+                { opacity: 1, transform: 'translate3d(0, 0, 0)' },
+              ]
+            : [{ opacity: 0 }, { opacity: 1 }],
           {
-            delay: INTRO_TIMING.subtitleDelay,
-            duration: INTRO_TIMING.subtitleDuration,
+            delay: motion.subtitleDelay,
+            duration: motion.subtitleDuration,
             easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
             fill: 'both',
           },
@@ -225,16 +277,21 @@ export function IntroScene({
 
         const actionAnimation = animate(
           actions,
-          [
-            {
-              opacity: 0,
-              transform: 'translate3d(0, 6px, 0) scale(0.97)',
-            },
-            { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' },
-          ],
+          fullMotion
+            ? [
+                {
+                  opacity: 0,
+                  transform: 'translate3d(0, 6px, 0) scale(0.97)',
+                },
+                {
+                  opacity: 1,
+                  transform: 'translate3d(0, 0, 0) scale(1)',
+                },
+              ]
+            : [{ opacity: 0 }, { opacity: 1 }],
           {
-            delay: INTRO_TIMING.actionDelay,
-            duration: INTRO_TIMING.actionDuration,
+            delay: motion.actionDelay,
+            duration: motion.actionDuration,
             easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
             fill: 'both',
           },
@@ -243,42 +300,30 @@ export function IntroScene({
           if (!cancelled) setListenReady(true)
         }
 
-        animate(
-          kicker,
-          [{ opacity: 0 }, { opacity: 1 }],
-          {
-            delay: INTRO_TIMING.supportDelay,
-            duration: INTRO_TIMING.supportDuration,
-            easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
-            fill: 'both',
-          },
-        )
-        animate(
-          notes,
-          [{ opacity: 0 }, { opacity: 1 }],
-          {
-            delay: INTRO_TIMING.supportDelay,
-            duration: INTRO_TIMING.supportDuration,
-            easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
-            fill: 'both',
-          },
-        )
-        animate(
-          assembly,
-          [{ opacity: 0 }, { opacity: 1 }],
-          {
-            delay: INTRO_TIMING.assemblyDelay,
-            duration: INTRO_TIMING.assemblyDuration,
-            easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
-            fill: 'both',
-          },
-        )
+        animate(kicker, [{ opacity: 0 }, { opacity: 1 }], {
+          delay: motion.supportDelay,
+          duration: motion.supportDuration,
+          easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
+          fill: 'both',
+        })
+        animate(notes, [{ opacity: 0 }, { opacity: 1 }], {
+          delay: motion.supportDelay,
+          duration: motion.supportDuration,
+          easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
+          fill: 'both',
+        })
+        animate(assembly, [{ opacity: 0 }, { opacity: 1 }], {
+          delay: motion.assemblyDelay,
+          duration: motion.assemblyDuration,
+          easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
+          fill: 'both',
+        })
         const aboutAnimation = animate(
           about,
           [{ opacity: 0 }, { opacity: 1 }],
           {
-            delay: INTRO_TIMING.aboutDelay,
-            duration: INTRO_TIMING.aboutDuration,
+            delay: motion.aboutDelay,
+            duration: motion.aboutDuration,
             easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
             fill: 'both',
           },
@@ -319,7 +364,7 @@ export function IntroScene({
       effectAnimations = []
       effectPausedAnimations.clear()
     }
-  }, [completeIntro, isPlaying])
+  }, [completeIntro, isPlaying, reducedMotion])
 
   const handleStart = () => {
     if (!listenReady || startLockRef.current) return
@@ -354,9 +399,12 @@ export function IntroScene({
 
   return (
     <main
-      className={`intro-scene ${isPlaying ? 'intro-scene--playing' : ''}`}
+      className={`intro-scene ${isPlaying ? 'intro-scene--playing' : ''} ${isPlaying && reducedMotion ? 'intro-scene--reduced-playing' : ''}`}
       data-intro-state={isPlaying ? 'playing' : 'complete'}
-      data-intro-total-ms={INTRO_TIMING.total}
+      data-intro-reduced={reducedMotion}
+      data-intro-total-ms={
+        reducedMotion ? INTRO_TIMING.reduced.total : INTRO_TIMING.total
+      }
     >
       <GlassPrewarm
         width={Math.round(prewarmWidth)}
@@ -383,6 +431,12 @@ export function IntroScene({
             ref={pathRef}
             pathLength={1}
             className="intro-thread__path"
+            d="M0 35 C44 35 47 23 79 31 S120 49 152 32 S192 13 224 34 S270 55 306 30 S350 18 382 35 S425 50 462 28 S512 22 548 36 S599 43 640 34"
+          />
+          <path
+            ref={tracerRef}
+            pathLength={1}
+            className="intro-thread__tracer"
             d="M0 35 C44 35 47 23 79 31 S120 49 152 32 S192 13 224 34 S270 55 306 30 S350 18 382 35 S425 50 462 28 S512 22 548 36 S599 43 640 34"
           />
         </svg>

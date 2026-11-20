@@ -215,6 +215,16 @@ button { cursor: pointer; }
   filter: blur(0.2px);
 }
 
+.intro-thread__tracer {
+  fill: none;
+  stroke: var(--color-mother-readable);
+  stroke-width: 0.9;
+  stroke-linecap: round;
+  stroke-dasharray: 0.18 0.82;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .intro-skip {
   position: absolute;
   top: max(0.9rem, env(safe-area-inset-top));
@@ -256,6 +266,11 @@ button { cursor: pointer; }
 .intro-scene--playing .intro-thread__path {
   opacity: 0;
   stroke-dashoffset: 1;
+}
+
+.intro-scene--reduced-playing .intro-title__line {
+  clip-path: none;
+  transform: none;
 }
 
 .intro-assembly {
