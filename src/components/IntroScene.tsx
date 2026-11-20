@@ -451,7 +451,7 @@ export function IntroScene({
           <button
             ref={listenButtonRef}
             type="button"
-            className="primary-button"
+            className="intro-listen-button"
             onClick={handleStart}
             aria-disabled={!listenReady}
             tabIndex={listenReady ? 0 : -1}
