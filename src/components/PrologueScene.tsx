@@ -7,9 +7,9 @@ interface PrologueSceneProps {
 }
 
 const SENTENCE_TIMING = {
-  initialFadeOut: 1100,
-  step: 1900,
-  sentenceDuration: 1900,
+  initialFadeOut: 1400,
+  step: 2400,
+  sentenceDuration: 2200,
 } as const
 
 export function PrologueScene({ onBegin, onComplete }: PrologueSceneProps) {
@@ -23,10 +23,10 @@ export function PrologueScene({ onBegin, onComplete }: PrologueSceneProps) {
   const finishSequence = useCallback(() => {
     if (completedRef.current) return
     completedRef.current = true
-    const animations = animationsRef.current
     animationsRef.current = []
     pausedAnimationsRef.current.clear()
-    animations.forEach((animation) => animation.cancel())
+    // Keep the final invisible animation state until React unmounts this
+    // scene, otherwise the first sentence's base CSS can flash back for a frame.
     onComplete()
   }, [onComplete])
 
