@@ -110,7 +110,6 @@ button { cursor: pointer; }
   min-height: 100svh;
   padding: clamp(1.5rem, 4vw, 4rem);
   place-items: center;
-  animation: scene-enter 900ms ease both;
 }
 
 .intro-content {
@@ -137,6 +136,11 @@ button { cursor: pointer; }
   text-wrap: balance;
 }
 
+.intro-title__line {
+  display: block;
+  transform-origin: center;
+}
+
 .intro-subtitle {
   margin-top: clamp(1.35rem, 3vh, 2.3rem);
   color: #c0b7a9;
@@ -151,6 +155,11 @@ button { cursor: pointer; }
   flex-direction: column;
   align-items: center;
   gap: 0.55rem;
+}
+
+.intro-actions .primary-button[aria-disabled="true"] {
+  pointer-events: none;
+  cursor: default;
 }
 
 .intro-notes {
@@ -180,6 +189,7 @@ button { cursor: pointer; }
 
 .intro-about:hover,
 .intro-about:active { color: var(--color-ink); border-bottom-color: var(--color-line); }
+.intro-about:disabled { cursor: default; pointer-events: none; }
 
 .intro-thread {
   position: absolute;
@@ -198,8 +208,54 @@ button { cursor: pointer; }
   stroke: var(--color-mother);
   stroke-width: 0.75;
   stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  transform-box: fill-box;
+  transform-origin: center;
   filter: blur(0.2px);
-  animation: thread-breathe 6s ease-in-out infinite;
+}
+
+.intro-skip {
+  position: absolute;
+  top: max(0.9rem, env(safe-area-inset-top));
+  right: max(1rem, env(safe-area-inset-right));
+  z-index: 2;
+  min-width: 5.5rem;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.25rem;
+  color: var(--color-muted);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  letter-spacing: 0.06em;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+}
+
+.intro-skip:hover,
+.intro-skip:active {
+  color: var(--color-ink);
+  border-bottom-color: var(--color-line);
+}
+
+.intro-scene--playing .intro-kicker,
+.intro-scene--playing .intro-subtitle,
+.intro-scene--playing .intro-actions,
+.intro-scene--playing .intro-notes,
+.intro-scene--playing .intro-about,
+.intro-scene--playing .intro-assembly {
+  opacity: 0;
+}
+
+.intro-scene--playing .intro-title__line {
+  opacity: 0;
+  clip-path: inset(0 0 100% 0);
+  transform: translate3d(0, 10px, 0);
+}
+
+.intro-scene--playing .intro-thread__path {
+  opacity: 0;
+  stroke-dashoffset: 1;
 }
 
 .intro-assembly {
@@ -410,11 +466,6 @@ button { cursor: pointer; }
 
 .follow-panel__status { min-height: 2.6em; margin-top: 0.55rem; color: #999184; font-size: 0.67rem; line-height: 1.55; }
 .follow-panel__privacy { color: var(--color-muted); font-size: 0.61rem; line-height: 1.65; }
-
-@keyframes thread-breathe {
-  0%, 100% { opacity: 0.35; transform: translateY(0) scaleX(0.985); }
-  50% { opacity: 0.82; transform: translateY(2px) scaleX(1.01); }
-}
 
 @keyframes follow-pulse {
   0%, 100% { transform: scale(0.8); opacity: 0.6; }
@@ -693,7 +744,13 @@ button { cursor: pointer; }
   .about-notes { margin-top: 2.3rem; }
   .about-actions { justify-content: flex-start; margin-top: 1.5rem; }
 
-  .intro-scene { align-items: center; padding: 1.4rem; }
+  .intro-scene {
+    align-items: center;
+    padding-top: max(1.4rem, env(safe-area-inset-top));
+    padding-right: max(1.4rem, env(safe-area-inset-right));
+    padding-bottom: max(1.4rem, env(safe-area-inset-bottom));
+    padding-left: max(1.4rem, env(safe-area-inset-left));
+  }
   .intro-content h1 { font-size: clamp(2.85rem, 13vw, 4.5rem); }
   .intro-subtitle { font-size: 0.85rem; line-height: 1.85; }
   .intro-notes { grid-template-columns: 1fr; }
@@ -995,8 +1052,8 @@ button { cursor: pointer; }
 .glass-debug-panel__marks { justify-content: flex-start; flex-wrap: wrap; }
 .glass-debug-panel p { margin-top: 0.45rem; color: #766f65; line-height: 1.55; }
 /* Core mechanism polish */
-.intro-content h1 span {
-  display: inline;
+.intro-content .intro-title__line {
+  display: block;
 }
 
 .scene-guide {

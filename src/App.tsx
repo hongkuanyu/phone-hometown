@@ -52,6 +52,7 @@ function App() {
   const [audio] = useState(() => new NarrativeAudio())
 
   const [scene, setScene] = useState<Scene>('intro')
+  const [introHasPlayed, setIntroHasPlayed] = useState(false)
   const [termIndex, setTermIndex] = useState(0)
   const [chapterRun, setChapterRun] = useState(0)
   const [audioMuted, setAudioMuted] = useState(false)
@@ -120,7 +121,12 @@ function App() {
     [duckFor],
   )
 
+  const markIntroComplete = useCallback(() => {
+    setIntroHasPlayed(true)
+  }, [])
+
   const startStory = useCallback(async () => {
+    setIntroHasPlayed(true)
     setAudioMuted(false)
     setAudioPaused(false)
     audio.setPaused(false)
@@ -515,7 +521,13 @@ function App() {
       data-translation-open={translationOpen}
     >
       {scene === 'intro' && (
-        <IntroScene onStart={() => void startStory()} onOpenAbout={openAbout} />
+        <IntroScene
+          animateIntro={!introHasPlayed}
+          reducedMotion={reducedMotion}
+          onStart={() => void startStory()}
+          onIntroComplete={markIntroComplete}
+          onOpenAbout={openAbout}
+        />
       )}
 
       {chapter && (
