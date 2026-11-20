@@ -126,7 +126,18 @@ function App() {
     setIntroHasPlayed(true)
   }, [])
 
-  const continueFromPrologue = useCallback(() => {
+  const beginPrologue = useCallback(() => {
+    setAudioMuted(false)
+    setAudioPaused(false)
+    audio.setPaused(false)
+    audio.setMuted(false)
+    setAudioLevel(0)
+    void audio.unlock().then((unlocked) => {
+      setAudioUnlocked(unlocked)
+    })
+  }, [audio])
+
+  const finishPrologue = useCallback(() => {
     setScene('intro')
   }, [])
 
@@ -425,7 +436,8 @@ function App() {
   useEffect(() => {
     if (!audioUnlocked) return
 
-    if (scene === 'call') audio.setAmbient('phone', getChapter('call').ambientSrc)
+    if (scene === 'prologue' || scene === 'intro' || scene === 'call')
+      audio.setAmbient('phone', getChapter('call').ambientSrc)
     else if (scene === 'stove') audio.setAmbient('kitchen', getChapter('stove').ambientSrc)
     else if (scene === 'transition') audio.setAmbient('night', getChapter('cooling').ambientSrc)
     else if (scene === 'cooling') audio.setAmbient('night', getChapter('cooling').ambientSrc)
@@ -433,7 +445,7 @@ function App() {
     else audio.setAmbient('none')
 
     return () => {
-      if (scene === 'about' || scene === 'intro') audio.stopAmbient()
+      if (scene === 'about') audio.stopAmbient()
     }
   }, [audio, audioUnlocked, scene])
 
@@ -527,7 +539,7 @@ function App() {
       data-translation-open={translationOpen}
     >
       {scene === 'prologue' && (
-        <PrologueScene onContinue={continueFromPrologue} />
+        <PrologueScene onBegin={beginPrologue} onComplete={finishPrologue} />
       )}
 
       {scene === 'intro' && (

@@ -51,6 +51,8 @@ export class NarrativeAudio {
   private ambientBaseGain = 0.5
   private ambientVolume = 0.58
   private ambientDucked = false
+  private ambientMode: AmbientMode = 'none'
+  private ambientSource: string | undefined
   private voiceGain: GainNode | null = null
   private activeVoiceSources: AudioScheduledSourceNode[] = []
   private voiceVolume = 0.9
@@ -341,9 +343,22 @@ export class NarrativeAudio {
 
   setAmbient(mode: AmbientMode, source?: string) {
     if (!this.context || !this.master) return
-    this.stopAmbient()
-    if (mode === 'none') return
+    if (mode === 'none') {
+      this.stopAmbient()
+      return
+    }
+    if (
+      this.ambientGain &&
+      this.ambientMode === mode &&
+      this.ambientSource === source
+    ) {
+      this.updateAmbientGain(0.08)
+      return
+    }
 
+    this.stopAmbient()
+    this.ambientMode = mode
+    this.ambientSource = source
     const context = this.context
     const gain = context.createGain()
     gain.gain.value = 0
@@ -519,6 +534,8 @@ export class NarrativeAudio {
   }
 
   stopAmbient() {
+    this.ambientMode = 'none'
+    this.ambientSource = undefined
     if (!this.context) return
     const now = this.context.currentTime
     if (this.ambientGain) {
