@@ -6,7 +6,6 @@ export const introCopy = {
   title: siteConfig.title,
   subtitle: '一个不会说常州话的年轻人，\n试图听懂母亲电话里的声音。',
   listening: '建议佩戴耳机',
-  duration: siteConfig.durationLabel,
   privacy: '麦克风仅在主动跟读时启用，录音不会上传。',
   answer: '接听',
   about: '作品与声音说明',

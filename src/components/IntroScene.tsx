@@ -78,7 +78,6 @@ export function IntroScene({
   const pathRef = useRef<SVGPathElement>(null)
   const tracerRef = useRef<SVGPathElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
-  const kickerRef = useRef<HTMLParagraphElement>(null)
   const subtitleRef = useRef<HTMLParagraphElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const notesRef = useRef<HTMLDListElement>(null)
@@ -138,7 +137,6 @@ export function IntroScene({
             '.intro-title__line',
           ) ?? [],
         )
-        const kicker = kickerRef.current
         const subtitle = subtitleRef.current
         const actions = actionsRef.current
         const notes = notesRef.current
@@ -149,7 +147,6 @@ export function IntroScene({
           !path ||
           !tracer ||
           titleLines.length < 2 ||
-          !kicker ||
           !subtitle ||
           !actions ||
           !notes ||
@@ -300,12 +297,6 @@ export function IntroScene({
           if (!cancelled) setListenReady(true)
         }
 
-        animate(kicker, [{ opacity: 0 }, { opacity: 1 }], {
-          delay: motion.supportDelay,
-          duration: motion.supportDuration,
-          easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
-          fill: 'both',
-        })
         animate(notes, [{ opacity: 0 }, { opacity: 1 }], {
           delay: motion.supportDelay,
           duration: motion.supportDuration,
@@ -443,9 +434,6 @@ export function IntroScene({
       </div>
 
       <section className="intro-content" aria-labelledby="intro-title">
-        <p ref={kickerRef} className="intro-kicker">
-          {introCopy.duration}
-        </p>
         <h1 ref={titleRef} id="intro-title">
           {siteConfig.titleLines.map((line) => (
             <span key={line} className="intro-title__line">
