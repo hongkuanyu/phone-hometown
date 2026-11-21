@@ -7,9 +7,9 @@ import type { RecordedFragment } from '../types'
 interface PathSummary {
   replayed: number
   explained: number
-  skipped: number
-  followed: number
   inspected: number
+  skipped: number
+  untouched: number
 }
 
 interface AboutSceneProps {
@@ -75,44 +75,47 @@ export function AboutScene({
     ['版权', siteConfig.credits.copyright],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]))
 
+  const traceParts = [
+    pathSummary.replayed > 0 ? `重听了 ${pathSummary.replayed} 次` : '',
+    pathSummary.explained > 0 ? `问了她 ${pathSummary.explained} 次“啊？”` : '',
+    pathSummary.inspected > 0 ? `看过 ${pathSummary.inspected} 次意思` : '',
+    pathSummary.skipped > 0 ? `让 ${pathSummary.skipped} 句话先过去` : '',
+  ].filter(Boolean)
+
   return (
     <main className="about-scene" aria-label={aboutCopy.aria}>
       <header className="about-header">
-        <p className="about-kicker">作品信息 · 声音档案仅限当前标签页</p>
+        <p className="about-kicker">作品与声音</p>
         <h1>{aboutCopy.title}</h1>
         <p className="about-lead">{aboutCopy.concept}</p>
       </header>
 
-      <div className="about-grid">
-        <section className="archive-section" aria-labelledby="archive-title">
-          <div className="section-heading">
-            <h2 id="archive-title">声音档案</h2>
-          </div>
+      <div className="about-content">
+        <section className="about-section" aria-labelledby="about-work-title">
+          <h2 id="about-work-title">作品与声音</h2>
+          <p>{aboutCopy.creation}</p>
+        </section>
 
-          <dl className="archive-counts">
-            <div>
-              <dt>母亲留下的录音</dt>
-              <dd>{motherRecordingCount} 段</dd>
-            </div>
-            <div>
-              <dt>你本次留下的录音</dt>
-              <dd>{fragments.length} 段</dd>
-            </div>
-          </dl>
+        <section className="about-section" aria-labelledby="about-mother-title">
+          <h2 id="about-mother-title">母亲留下的声音</h2>
+          <p className="about-measure">{motherRecordingCount} 段</p>
+          <p>{aboutCopy.motherArchive}</p>
+        </section>
+
+        <section className="about-section" aria-labelledby="about-user-title">
+          <h2 id="about-user-title">你刚刚留下的声音</h2>
+          <p className="about-measure">{fragments.length} 段</p>
 
           {fragments.length === 0 ? (
             <p className="archive-empty">这次没有留下录音。沉默也是完整的。</p>
           ) : (
             <ol className="archive-list">
-              {fragments.map((fragment, index) => (
+              {fragments.map((fragment) => (
                 <li key={fragment.id}>
-                  <span className="archive-index">
-                    {(index + 1).toString().padStart(2, '0')}
-                  </span>
                   <div className="archive-copy">
                     <strong>{fragment.label}</strong>
                     <span>
-                      {fragment.source} · {formatDuration(fragment.duration)} · 只存在于本页
+                      {fragment.source} · {formatDuration(fragment.duration)}
                     </span>
                   </div>
                   <button
@@ -130,25 +133,41 @@ export function AboutScene({
 
           {rhythmRestoredCount > 0 && (
             <p className="archive-note archive-note--rhythm">
-              你用节奏补回了笔画，没有录音。
+              你用节奏补回了 {rhythmRestoredCount} 次。没有留下录音。
             </p>
           )}
           <p className="archive-note">
-            录音不上传、不写入存储。关闭或刷新标签页后，档案自动消失。
+            这些声音只留在这一次打开的页面里。刷新或关闭以后，它们就会消失。
           </p>
-
-          <div className="path-summary" aria-label="这次体验的停留方式">
-            <span>重听 {pathSummary.replayed}</span>
-            <span>追问 {pathSummary.explained}</span>
-            <span>查看 {pathSummary.inspected}</span>
-            <span>跳过 {pathSummary.skipped}</span>
-            <span>跟读 {pathSummary.followed}</span>
-          </div>
         </section>
 
-        <section className="about-notes" aria-labelledby="notes-title">
-          <h2 id="notes-title">关于这部作品</h2>
-          <p>{aboutCopy.creation}</p>
+        <section className="about-section" aria-labelledby="about-traces-title">
+          <h2 id="about-traces-title">这次体验中的一些痕迹</h2>
+          <p>
+            {traceParts.length > 0
+              ? `这次你${traceParts.join('，')}。`
+              : '这次你没有重听、追问或查看意思，只是听了一会儿。'}
+          </p>
+          {pathSummary.untouched > 0 && (
+            <p>还有 {pathSummary.untouched} 句话，你没有停下来追问。</p>
+          )}
+        </section>
+
+        <section className="about-section" aria-labelledby="about-transcript-title">
+          <h2 id="about-transcript-title">声音与转写说明</h2>
+          <p>{aboutCopy.transcript}</p>
+          <p>{aboutCopy.collection}</p>
+        </section>
+
+        <section className="about-section" aria-labelledby="about-privacy-title">
+          <h2 id="about-privacy-title">授权与隐私</h2>
+          <p>{aboutCopy.authorization}</p>
+          <p>{aboutCopy.permission}</p>
+        </section>
+
+        <section className="about-section about-section--technical" aria-labelledby="about-tech-title">
+          <h2 id="about-tech-title">技术说明</h2>
+          <p>{aboutCopy.technology}</p>
           <dl className="about-meta">
             <div>
               <dt>作品类型</dt>
@@ -165,33 +184,13 @@ export function AboutScene({
               </div>
             ))}
           </dl>
-          <details>
-            <summary>家庭转写说明</summary>
-            <p>{aboutCopy.transcript}</p>
-          </details>
-          <details>
-            <summary>声音采集说明</summary>
-            <p>{aboutCopy.collection}</p>
-          </details>
-          <details>
-            <summary>录音授权说明</summary>
-            <p>{aboutCopy.authorization}</p>
-          </details>
-          <details>
-            <summary>麦克风与隐私</summary>
-            <p>{aboutCopy.permission}</p>
-          </details>
-          <details>
-            <summary>技术说明</summary>
-            <p>{aboutCopy.technology}</p>
-          </details>
         </section>
       </div>
 
       <footer className="about-actions">
         {canReturn && (
           <button type="button" className="quiet-button" onClick={onReturn}>
-            回到刚才的电话
+            继续听
           </button>
         )}
         <button type="button" className="quiet-button" onClick={onHome}>
@@ -202,7 +201,7 @@ export function AboutScene({
           className="primary-button primary-button--small"
           onClick={onRestart}
         >
-          重播整段体验
+          重新开始
         </button>
       </footer>
     </main>

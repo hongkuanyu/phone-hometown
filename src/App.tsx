@@ -9,6 +9,7 @@ import { PrologueScene } from './components/PrologueScene'
 import { StoryScene } from './components/StoryScene'
 import { TransitionScene } from './components/TransitionScene'
 import { getChapter } from './content/scenes'
+import { allTerms } from './content/terms'
 import { themeStyle } from './data/theme'
 import { useCallTimer } from './hooks/useCallTimer'
 import { useReducedMotion } from './hooks/useReducedMotion'
@@ -73,7 +74,6 @@ function App() {
   const [rhythmTermIds, setRhythmTermIds] = useState<string[]>([])
   const [skippedTermIds, setSkippedTermIds] = useState<string[]>([])
   const [explainedTermIds, setExplainedTermIds] = useState<string[]>([])
-  const [inspectedTermIds, setInspectedTermIds] = useState<string[]>([])
   const [recordedFragments, setRecordedFragments] = useState<RecordedFragment[]>([])
   const [choices, setChoices] = useState<Choice[]>([])
   const [audioLevel, setAudioLevel] = useState(0)
@@ -175,7 +175,6 @@ function App() {
     setRhythmTermIds([])
     setSkippedTermIds([])
     setExplainedTermIds([])
-    setInspectedTermIds([])
     setRecordedFragments([])
     setChoices([])
     setAboutReturn(null)
@@ -191,7 +190,6 @@ function App() {
     setRhythmTermIds([])
     setSkippedTermIds([])
     setExplainedTermIds([])
-    setInspectedTermIds([])
     setRecordedFragments([])
     setChoices([])
     setMicPermission('unknown')
@@ -252,9 +250,6 @@ function App() {
     }
     if (choice.type === 'explain') {
       setExplainedTermIds((previous) => addUnique(previous, choice.termId!))
-    }
-    if (choice.type === 'meaning') {
-      setInspectedTermIds((previous) => addUnique(previous, choice.termId!))
     }
   }, [])
 
@@ -392,7 +387,6 @@ function App() {
     )
     setSkippedTermIds((previous) => previous.filter((id) => !chapterTermIds.has(id)))
     setExplainedTermIds((previous) => previous.filter((id) => !chapterTermIds.has(id)))
-    setInspectedTermIds((previous) => previous.filter((id) => !chapterTermIds.has(id)))
     setChoices((previous) => previous.filter((choice) => choice.scene !== chapter.scene))
   }, [audio, chapter, clearDuckTimers])
 
@@ -493,16 +487,19 @@ function App() {
     setScene('about')
   }, [audio, clearDuckTimers])
 
+  const touchedTermIds = new Set(
+    choices
+      .map((choice) => choice.termId)
+      .filter((termId): termId is string => Boolean(termId)),
+  )
   const pathSummary = {
     replayed: choices.filter((choice) => choice.type === 'replay').length,
     explained: choices.filter((choice) => choice.type === 'explain').length,
+    inspected: choices.filter((choice) => choice.type === 'meaning').length,
     skipped: choices.filter(
       (choice) => choice.type === 'skip' || choice.type === 'pretend',
     ).length,
-    followed: choices.filter(
-      (choice) => choice.type === 'follow' || choice.type === 'save',
-    ).length,
-    inspected: choices.filter((choice) => choice.type === 'meaning').length,
+    untouched: Math.max(0, allTerms.length - touchedTermIds.size),
   }
 
   const sharedPhoneProps = {
@@ -586,8 +583,6 @@ function App() {
         <EndingScene
           {...sharedPhoneProps}
           restoredTermSources={restoredTermSources}
-          skippedTermIds={skippedTermIds}
-          inspectedTermIds={inspectedTermIds}
           onComplete={openArchiveFromEnding}
         />
       )}

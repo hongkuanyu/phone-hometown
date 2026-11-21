@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { PlaybackRate } from '../types'
 
 const speeds: PlaybackRate[] = [0.85, 1, 1.15]
@@ -41,6 +42,20 @@ export function PhoneChrome({
   onRestartChapter,
   onOpenAbout,
 }: PhoneChromeProps) {
+  const settingsRef = useRef<HTMLDetailsElement>(null)
+  const settingsSummaryRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !settingsRef.current?.open) return
+      event.preventDefault()
+      settingsRef.current.open = false
+      settingsSummaryRef.current?.focus()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [])
+
   return (
     <header className="phone-chrome">
       <div className="call-meta" aria-label={`通话中，${timer}${stage ? `，${stage}` : ''}`}>
@@ -52,14 +67,16 @@ export function PhoneChrome({
 
       <div className="utility-controls">
         <details
-          className="playback-settings sound-settings"
+          ref={settingsRef}
+          className="playback-settings experience-settings"
           data-muted={audioMuted}
         >
           <summary
+            ref={settingsSummaryRef}
             className="utility-button playback-settings__summary"
-            aria-label={`声音设置，当前声音${audioMuted ? '关闭' : '开启'}`}
+            aria-label={`设置与播放控制，当前声音${audioMuted ? '关闭' : '开启'}`}
           >
-            声音
+            设置
           </summary>
           <div className="playback-panel">
             <div className="playback-panel__actions">
@@ -78,6 +95,14 @@ export function PhoneChrome({
                 disabled={audioMuted}
               >
                 {audioPaused ? '继续声音' : '暂停声音'}
+              </button>
+              <button
+                type="button"
+                className="panel-button"
+                aria-pressed={subtitleVisible}
+                onClick={onToggleSubtitles}
+              >
+                提示字幕：{subtitleVisible ? '开' : '关'}
               </button>
               {showChapterRestart && onRestartChapter && (
                 <button
@@ -142,16 +167,8 @@ export function PhoneChrome({
           </div>
         </details>
 
-        <button
-          type="button"
-          className="utility-button"
-          aria-pressed={subtitleVisible}
-          onClick={onToggleSubtitles}
-        >
-          提示：{subtitleVisible ? '开' : '关'}
-        </button>
         <button type="button" className="utility-button" onClick={onOpenAbout}>
-          作品信息
+          作品与声音
         </button>
       </div>
     </header>

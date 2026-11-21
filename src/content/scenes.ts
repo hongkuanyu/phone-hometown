@@ -13,7 +13,7 @@ export const introCopy = {
   subtitle: '声音会先抵达，意思可以迟到。',
   listening: '耳机体验更佳',
   answer: '接听',
-  about: '作品与声音说明',
+  about: '作品与声音',
 }
 
 export const callChapter: StoryChapter = {
@@ -62,32 +62,28 @@ export const getChapter = (scene: StoryChapter['scene']): StoryChapter => chapte
 
 export const endingCopy = {
   title: '电话还没有挂断。',
-  lead: '她还在和亲戚说话。你听见几个词，又把它们放回声音里。',
-  echo: '听见几个词',
+  lead: '她还在和亲戚说话。',
+  echo: '坐我边上',
+  afterword: '你听见几个词，又把它们放回声音里。',
   action: '看看留下了什么',
-  unrecovered: '没有追问的字，仍然散在底噪里。',
-  followed: '跟读留下的冷白笔画，没有把任何一句话变完整。',
-  rhythmFollowed: '节奏补回的暖灰笔画，没有把任何一句话变完整。',
-  semanticFollowed: '你看过一些解释，裂纹仍在原处。',
-  unparticipated: '你没有把声音留下。她的话也仍然停在电话里。',
-  context: '看过解释的地方，留下了更长的回声。',
 }
 
 export const aboutCopy = {
   title: siteConfig.title,
-  concept:
-    '母亲说话时，文字形成裂纹、碎开；你能补回一部分，却无法替她把话说完。',
+  concept: '一通没有挂断的电话，和一组来自家庭的真实录音。',
   creation:
-    '母亲说话时，文字逐渐形成裂纹、碎开。重听和追问让它们重新聚合；观众的声音只能补回其中一部分，无法替母亲把话说完。',
+    '母亲说话时，文字形成裂纹、碎开。你可以重听、追问，或留下自己的声音；但只能补回其中一部分。',
   transcript:
     '家庭转写依据录音脚本与家庭记忆整理，用词和语序保留地方表达。录音中若有自然改口，文字仍以家庭成员最终确认的版本为准。',
+  motherArchive:
+    '主句和补充解释都来自母亲本人同意公开的家庭录音，并保留原始声音。',
   collection:
     '母亲声音来自项目提供的 17 条家庭录音。主句与补充解释已从原始录音中分段，环境声由 Web Audio API 实时生成。',
   authorization:
     '真实声音只使用本人明确同意公开的录音。当前录音仅用于本作品展示；未经同意的亲属录音、电话号码与私人对话不应进入仓库或线上页面。',
   permission:
-    '麦克风只在主动按住跟读时申请。页面不上传、不持久化录音；片段只存在于当前标签页内存中。跟读只分析音量、起音、持续时间和节奏，不做语音识别或发音判断。',
+    '麦克风只在按住“留下声音”时申请。不识别、不评分、不上传；片段只存在当前页面，刷新或关闭后消失。',
   technology:
     'React + TypeScript + Canvas + Web Audio API + MediaRecorder。母亲录音以单声道 AAC 接入；没有后端、第三方音频服务、语音识别、评分或账号系统。',
-  aria: '作品信息与声音档案',
+  aria: '作品与声音',
 }

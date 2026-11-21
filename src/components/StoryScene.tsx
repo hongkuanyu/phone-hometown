@@ -627,7 +627,7 @@ export function StoryScene({
                 className="primary-button action-button--advance"
                 onClick={onAdvance}
               >
-                {isCall ? '继续通话' : '继续听'}
+                继续听
                 <span className="action-button__arrow" aria-hidden="true">→</span>
               </button>
             </div>
