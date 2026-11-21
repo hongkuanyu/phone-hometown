@@ -59,7 +59,7 @@ function App() {
   const [audioMuted, setAudioMuted] = useState(false)
   const [audioPaused, setAudioPaused] = useState(false)
   const [playbackRate, setPlaybackRate] = useState<PlaybackRate>(1)
-  const [ambientVolume, setAmbientVolume] = useState(0.58)
+  const [ambientVolume, setAmbientVolume] = useState(0.74)
   const [voiceVolume, setVoiceVolume] = useState(0.9)
   const [subtitleVisible, setSubtitleVisible] = useState(false)
   const [translationOpen, setTranslationOpen] = useState(false)
