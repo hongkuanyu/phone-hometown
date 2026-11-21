@@ -724,31 +724,33 @@ export function StoryScene({
                 role="group"
                 aria-label="当前这句话的操作"
               >
-              <div className="sentence-assist">
+              <div className={`sentence-assist ${helperOpen ? 'is-expanded' : ''}`}>
                 {helperReady && (
                   <>
-                    <button
-                      type="button"
-                      className="sentence-helper-prompt"
-                      onClick={() => {
-                        onDismissCallGuide()
-                        onDismissSoundGuide()
-                        setHelperOpenFor(helperOpen ? null : term.id)
-                      }}
-                      aria-expanded={helperOpen}
-                      aria-controls={`sentence-helper-${term.id}`}
-                    >
-                      没听清？
-                    </button>
-                    {!helperOpen && (
+                    <div className="sentence-assist__quick">
                       <button
                         type="button"
-                        className="sentence-quick-replay"
-                        onClick={replay}
+                        className="sentence-helper-prompt"
+                        onClick={() => {
+                          onDismissCallGuide()
+                          onDismissSoundGuide()
+                          setHelperOpenFor(helperOpen ? null : term.id)
+                        }}
+                        aria-expanded={helperOpen}
+                        aria-controls={`sentence-helper-${term.id}`}
                       >
-                        再听一次
+                        没听清？
                       </button>
-                    )}
+                      {!helperOpen && (
+                        <button
+                          type="button"
+                          className="sentence-quick-replay"
+                          onClick={replay}
+                        >
+                          再听一次
+                        </button>
+                      )}
+                    </div>
                     {helperOpen && (
                       <div
                         id={`sentence-helper-${term.id}`}
