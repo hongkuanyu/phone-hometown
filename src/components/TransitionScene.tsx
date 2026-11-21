@@ -1,90 +1,72 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { coolingTerms } from '../content/terms'
-import type { PlaybackRate } from '../types'
-import { PhoneChrome } from './PhoneChrome'
 import { SoundTextCanvas } from './SoundTextCanvas'
 
+export type TransitionDirection = 'memory' | 'reality'
+
 interface TransitionSceneProps {
-  timer: string
+  direction: TransitionDirection
   audioLevel: number
-  audioMuted: boolean
-  audioPaused: boolean
-  subtitleVisible: boolean
   reducedMotion: boolean
-  playbackRate: PlaybackRate
-  ambientVolume: number
-  voiceVolume: number
-  onToggleAudio: () => void
-  onTogglePause: () => void
-  onToggleSubtitles: () => void
-  onSetPlaybackRate: (rate: PlaybackRate) => void
-  onSetAmbientVolume: (volume: number) => void
-  onSetVoiceVolume: (volume: number) => void
-  onOpenAbout: () => void
   onComplete: () => void
 }
 
 export function TransitionScene({
-  timer,
+  direction,
   audioLevel,
-  audioMuted,
-  audioPaused,
-  subtitleVisible,
   reducedMotion,
-  playbackRate,
-  ambientVolume,
-  voiceVolume,
-  onToggleAudio,
-  onTogglePause,
-  onToggleSubtitles,
-  onSetPlaybackRate,
-  onSetAmbientVolume,
-  onSetVoiceVolume,
-  onOpenAbout,
   onComplete,
 }: TransitionSceneProps) {
-  const [text, setText] = useState('风过竹榻')
+  const [phase, setPhase] = useState(0)
+  const completedRef = useRef(false)
+
+  const finish = useCallback(() => {
+    if (completedRef.current) return
+    completedRef.current = true
+    onComplete()
+  }, [onComplete])
 
   useEffect(() => {
-    if (audioPaused) return
-    const textTimer = window.setTimeout(
-      () => setText(coolingTerms[0].display),
-      1400,
-    )
-    const finishTimer = window.setTimeout(onComplete, 4000)
-    return () => {
-      window.clearTimeout(textTimer)
-      window.clearTimeout(finishTimer)
+    completedRef.current = false
+
+    if (direction === 'memory') {
+      const phraseTimer = window.setTimeout(
+        () => setPhase(1),
+        reducedMotion ? 600 : 1700,
+      )
+      const finishTimer = window.setTimeout(
+        finish,
+        reducedMotion ? 1800 : 5200,
+      )
+      return () => {
+        window.clearTimeout(phraseTimer)
+        window.clearTimeout(finishTimer)
+      }
     }
-  }, [audioPaused, onComplete])
+
+    const finishTimer = window.setTimeout(
+      finish,
+      reducedMotion ? 1800 : 4800,
+    )
+    return () => window.clearTimeout(finishTimer)
+  }, [direction, finish, reducedMotion])
+
+  const text =
+    direction === 'memory'
+      ? phase === 0
+        ? '灶火退远'
+        : coolingTerms[0].display
+      : coolingTerms[coolingTerms.length - 1].display
 
   return (
-    <main className="transition-scene">
-      <PhoneChrome
-        timer={timer}
-        stage="转场"
-        audioMuted={audioMuted}
-        audioPaused={audioPaused}
-        subtitleVisible={subtitleVisible}
-        playbackRate={playbackRate}
-        ambientVolume={ambientVolume}
-        voiceVolume={voiceVolume}
-        onToggleAudio={onToggleAudio}
-        onTogglePause={onTogglePause}
-        onToggleSubtitles={onToggleSubtitles}
-        onSetPlaybackRate={onSetPlaybackRate}
-        onSetAmbientVolume={onSetAmbientVolume}
-        onSetVoiceVolume={onSetVoiceVolume}
-        onOpenAbout={onOpenAbout}
-      />
-
-      <section className="transition-field">
-        <p className="transition-caption">
-          {audioPaused ? '声音停在这里' : '灶火退远，虫鸣靠近'}
-        </p>
+    <main className={`transition-scene transition-scene--${direction}`}>
+      <section className={`transition-field transition-field--${direction}`}>
+        {direction === 'reality' && (
+          <span className="transition-reality-thread" aria-hidden="true" />
+        )}
         <SoundTextCanvas
           text={text}
-          stateKey={text}
+          stateKey={`${direction}-${phase}`}
           replayToken={0}
           audioLevel={audioLevel}
           restoration={0}
@@ -92,12 +74,8 @@ export function TransitionScene({
           speaking={false}
           chapter="transition"
           fractureMode="timed"
-          labelPrefix="转场文字"
+          labelPrefix={direction === 'memory' ? '夏夜记忆' : '电话那头'}
         />
-        <p className="transition-note">文字被吹散，又在另一个夏夜重新排列。</p>
-        <button type="button" className="quiet-button transition-skip" onClick={onComplete}>
-          现在进入纳凉
-        </button>
       </section>
     </main>
   )

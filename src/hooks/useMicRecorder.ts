@@ -90,6 +90,24 @@ export function useMicRecorder({
     setVoiceDetected(false)
   }, [])
 
+  const cancelCapture = useCallback(() => {
+    holdingRef.current = false
+    captureModeRef.current = null
+    const recorder = recorderRef.current
+    recorderRef.current = null
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = null
+      try {
+        recorder.stop()
+      } catch {
+        // The recorder may already be stopping.
+      }
+    }
+    chunksRef.current = []
+    cleanupResources()
+    setStatus('idle')
+  }, [cleanupResources])
+
   const finish = useCallback(
     (source: FollowSource, duration: number, clip?: VoiceClip) => {
       captureModeRef.current = null
@@ -288,16 +306,20 @@ export function useMicRecorder({
   }, [startAnalyser, startFallback, stopHold, updatePermission])
 
   useEffect(() => {
-    const release = () => {
-      if (holdingRef.current) stopHold()
+    const cancelIfActive = () => {
+      if (holdingRef.current || captureModeRef.current !== null) cancelCapture()
     }
-    window.addEventListener('blur', release)
+    const handleVisibility = () => {
+      if (document.hidden) cancelIfActive()
+    }
+    window.addEventListener('blur', cancelIfActive)
+    document.addEventListener('visibilitychange', handleVisibility)
     return () => {
-      window.removeEventListener('blur', release)
-      if (holdingRef.current) stopHold()
-      cleanupResources()
+      window.removeEventListener('blur', cancelIfActive)
+      document.removeEventListener('visibilitychange', handleVisibility)
+      cancelCapture()
     }
-  }, [cleanupResources, stopHold])
+  }, [cancelCapture])
 
   return {
     permission,
@@ -307,6 +329,7 @@ export function useMicRecorder({
     lastOutcome,
     startHold,
     stopHold,
+    cancelHold: cancelCapture,
     isActive:
       status === 'recording' || status === 'listening' || status === 'fallback',
   }

@@ -49,10 +49,13 @@ interface AboutReturn {
   termIndex: number
 }
 
+type TransitionTarget = 'cooling' | 'ending'
+
 function App() {
   const [audio] = useState(() => new NarrativeAudio())
 
   const [scene, setScene] = useState<Scene>('prologue')
+  const [transitionTarget, setTransitionTarget] = useState<TransitionTarget>('cooling')
   const [introHasPlayed, setIntroHasPlayed] = useState(false)
   const [termIndex, setTermIndex] = useState(0)
   const [chapterRun, setChapterRun] = useState(0)
@@ -68,8 +71,6 @@ function App() {
     Record<string, RestorationSource>
   >({})
   const [rhythmTermIds, setRhythmTermIds] = useState<string[]>([])
-  const [followGuideVisible, setFollowGuideVisible] = useState(false)
-  const followGuideSeenRef = useRef(false)
   const [skippedTermIds, setSkippedTermIds] = useState<string[]>([])
   const [explainedTermIds, setExplainedTermIds] = useState<string[]>([])
   const [inspectedTermIds, setInspectedTermIds] = useState<string[]>([])
@@ -149,12 +150,11 @@ function App() {
     await audio.unlock()
     setAudioUnlocked(true)
     setScene('call')
+    setTransitionTarget('cooling')
     setTermIndex(0)
     setChapterRun((value) => value + 1)
     setTranslationOpen(false)
     setRestoredTermSources({})
-    followGuideSeenRef.current = false
-    setFollowGuideVisible(false)
     clearDuckTimers()
   }, [audio, clearDuckTimers])
 
@@ -165,6 +165,7 @@ function App() {
     clearDuckTimers()
     setAudioLevel(0)
     setScene('intro')
+    setTransitionTarget('cooling')
     setTermIndex(0)
     setChapterRun(0)
     setTranslationOpen(false)
@@ -178,8 +179,6 @@ function App() {
     setRecordedFragments([])
     setChoices([])
     setAboutReturn(null)
-    setFollowGuideVisible(false)
-    followGuideSeenRef.current = false
     setAudioUnlocked(false)
     callTimer.reset()
   }, [audio, callTimer, clearDuckTimers, resetFragmentUrls])
@@ -209,8 +208,6 @@ function App() {
     setTermIndex(0)
     setTranslationOpen(false)
     setRestoredTermSources({})
-    followGuideSeenRef.current = false
-    setFollowGuideVisible(false)
   }, [audio, callTimer, clearDuckTimers, resetFragmentUrls])
 
   const openAbout = useCallback(() => {
@@ -280,7 +277,6 @@ function App() {
     [],
   )
 
-  const dismissFollowGuide = useCallback(() => setFollowGuideVisible(false), [])
 
   const getVoicePlayback = useCallback(
     () => audio.getVoicePlayback(),
@@ -366,7 +362,15 @@ function App() {
       setTermIndex((index) => index + 1)
       return
     }
-    setScene(chapter.nextScene)
+    if (chapter.scene === 'stove') {
+      setTransitionTarget('cooling')
+      setScene('transition')
+    } else if (chapter.scene === 'cooling') {
+      setTransitionTarget('ending')
+      setScene('transition')
+    } else {
+      setScene(chapter.nextScene)
+    }
     setTermIndex(0)
     setChapterRun((value) => value + 1)
   }, [audio, chapter, clearDuckTimers, termIndex])
@@ -427,17 +431,23 @@ function App() {
     if (!audioUnlocked) return
 
     if (scene === 'prologue' || scene === 'intro' || scene === 'call')
-      audio.setAmbient('phone', getChapter('call').ambientSrc)
-    else if (scene === 'stove') audio.setAmbient('kitchen', getChapter('stove').ambientSrc)
-    else if (scene === 'transition') audio.setAmbient('night', getChapter('cooling').ambientSrc)
-    else if (scene === 'cooling') audio.setAmbient('night', getChapter('cooling').ambientSrc)
-    else if (scene === 'ending') audio.setAmbient('phone', getChapter('call').ambientSrc)
+      audio.setAmbient('phone', getChapter('call').ambientSrc, 0.7)
+    else if (scene === 'stove')
+      audio.setAmbient('kitchen', getChapter('stove').ambientSrc, 1.8)
+    else if (scene === 'transition') {
+      if (transitionTarget === 'ending')
+        audio.setAmbient('phone', getChapter('call').ambientSrc, 2.2)
+      else audio.setAmbient('night', getChapter('cooling').ambientSrc, 2.2)
+    } else if (scene === 'cooling')
+      audio.setAmbient('night', getChapter('cooling').ambientSrc, 1.1)
+    else if (scene === 'ending')
+      audio.setAmbient('phone', getChapter('call').ambientSrc, 1.6)
     else audio.setAmbient('none')
 
     return () => {
       if (scene === 'about') audio.stopAmbient()
     }
-  }, [audio, audioUnlocked, scene])
+  }, [audio, audioUnlocked, scene, transitionTarget])
 
   useEffect(() => {
     if (!audioUnlocked) return
@@ -470,15 +480,11 @@ function App() {
     }
   }, [audio, resetFragmentUrls])
 
-  const advanceToCooling = useCallback(() => {
-    if (!followGuideSeenRef.current) {
-      followGuideSeenRef.current = true
-      setFollowGuideVisible(true)
-    }
-    setScene('cooling')
+  const completeTransition = useCallback(() => {
+    setScene(transitionTarget === 'ending' ? 'ending' : 'cooling')
     setTermIndex(0)
     setChapterRun((value) => value + 1)
-  }, [])
+  }, [transitionTarget])
 
   const openArchiveFromEnding = useCallback(() => {
     audio.stopVoice()
@@ -550,12 +556,10 @@ function App() {
           termIndex={termIndex}
           translationOpen={translationOpen}
           restoredTermSource={restoredTermSources[chapter.terms[termIndex].id]}
-          followGuideVisible={followGuideVisible}
           skippedTermIds={skippedTermIds}
           explainedTermIds={explainedTermIds}
           getVoicePlayback={getVoicePlayback}
           onFollowActiveChange={setFollowListening}
-          onDismissFollowGuide={dismissFollowGuide}
           onRestartChapter={restartChapter}
           onAdvance={advance}
           onPlayTerm={playTerm}
@@ -570,7 +574,12 @@ function App() {
       )}
 
       {scene === 'transition' && (
-        <TransitionScene {...sharedPhoneProps} onComplete={advanceToCooling} />
+        <TransitionScene
+          direction={transitionTarget === 'ending' ? 'reality' : 'memory'}
+          audioLevel={audioUnlocked ? audioLevel : 0}
+          reducedMotion={reducedMotion}
+          onComplete={completeTransition}
+        />
       )}
 
       {scene === 'ending' && (

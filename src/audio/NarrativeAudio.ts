@@ -341,7 +341,7 @@ export class NarrativeAudio {
     }
   }
 
-  setAmbient(mode: AmbientMode, source?: string) {
+  setAmbient(mode: AmbientMode, source?: string, fadeSeconds = 0.55) {
     if (!this.context || !this.master) return
     if (mode === 'none') {
       this.stopAmbient()
@@ -356,7 +356,7 @@ export class NarrativeAudio {
       return
     }
 
-    this.stopAmbient()
+    this.stopAmbient(Math.max(0.08, fadeSeconds * 0.72))
     this.ambientMode = mode
     this.ambientSource = source
     const context = this.context
@@ -375,7 +375,7 @@ export class NarrativeAudio {
       this.buildGeneratedAmbient(mode, gain)
     }
 
-    this.updateAmbientGain(0.55)
+    this.updateAmbientGain(fadeSeconds)
   }
 
   private async loadAmbientBuffer(source: string, destination: GainNode) {
@@ -533,14 +533,14 @@ export class NarrativeAudio {
     oscillator.stop(now + 0.18)
   }
 
-  stopAmbient() {
+  stopAmbient(fadeSeconds = 0.25) {
     this.ambientMode = 'none'
     this.ambientSource = undefined
     if (!this.context) return
     const now = this.context.currentTime
     if (this.ambientGain) {
       this.ambientGain.gain.cancelScheduledValues(now)
-      this.ambientGain.gain.setTargetAtTime(0, now, 0.25)
+      this.ambientGain.gain.setTargetAtTime(0, now, Math.max(0.05, fadeSeconds))
     }
     this.ambientTimers.forEach((timer) => window.clearInterval(timer))
     this.ambientTimers = []
@@ -554,7 +554,7 @@ export class NarrativeAudio {
           // Already stopped.
         }
       })
-    }, 900)
+    }, Math.max(900, fadeSeconds * 3200))
     this.ambientGain = null
   }
   async playTerm(

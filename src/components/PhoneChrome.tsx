@@ -43,11 +43,11 @@ export function PhoneChrome({
 }: PhoneChromeProps) {
   return (
     <header className="phone-chrome">
-      <div className="call-meta" aria-label={`通话中，${timer}，${stage}`}>
+      <div className="call-meta" aria-label={`通话中，${timer}${stage ? `，${stage}` : ''}`}>
         <span className="call-meta__dot" aria-hidden="true" />
         <span>通话中</span>
         <time>{timer}</time>
-        <span className="call-meta__stage">{stage}</span>
+        {stage && <span className="call-meta__stage">{stage}</span>}
       </div>
 
       <div className="utility-controls">
