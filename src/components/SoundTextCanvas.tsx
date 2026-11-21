@@ -802,18 +802,22 @@ function buildGeometry(
           : 'lost'
     const finalDistanceFactor =
       mobilityClass === 'anchor'
-        ? 0.012 + rng() * 0.028
+        ? chapter === 'cooling'
+          ? 0.1 + rng() * 0.08
+          : chapter === 'stove'
+            ? 0.095 + rng() * 0.07
+            : 0.09 + rng() * 0.065
         : mobilityClass === 'loose'
           ? chapter === 'cooling'
-            ? 0.14 + rng() * 0.13
+            ? 0.19 + rng() * 0.15
             : chapter === 'stove'
-              ? 0.11 + rng() * 0.11
-              : 0.085 + rng() * 0.085
+              ? 0.17 + rng() * 0.13
+              : 0.15 + rng() * 0.12
           : chapter === 'cooling'
-            ? 0.36 + rng() * 0.26
+            ? 0.42 + rng() * 0.26
             : chapter === 'stove'
-              ? 0.34 + rng() * 0.22
-              : 0.31 + rng() * 0.22
+              ? 0.39 + rng() * 0.23
+              : 0.36 + rng() * 0.22
     const nominalMotionScale =
       GLASS_TIMING[chapter].motionScale *
       (chapter === 'call' || chapter === 'stove' || chapter === 'cooling'
@@ -1489,17 +1493,17 @@ export function SoundTextCanvas({
         showFragments &&
         (crackProgress > 0.001 || restorationEnergy > 0.01)
       ) {
-        // Stable semantic residue: recognizable, but never a crisp subtitle layer.
-        const ghostFade = 1 - settle * 0.045
+        // The residue marks where the sentence was, then recedes as every piece lifts away.
+        const ghostFade = 1 - clamp(separation * 0.82 + settle * 0.08, 0, 0.9)
         context.globalAlpha = clamp(
           (0.105 + restorationEnergy * 0.012) * ghostFade,
-          0.08,
+          0.012,
           0.13,
         )
         context.drawImage(glyphResidueSurface, 0, 0, width, height)
         context.globalAlpha = clamp(
           (0.18 + restorationEnergy * 0.012) * ghostFade,
-          0.14,
+          0.02,
           0.21,
         )
         context.drawImage(glyphOutlineSurface, 0, 0, width, height)
