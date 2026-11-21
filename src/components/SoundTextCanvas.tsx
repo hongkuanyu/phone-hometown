@@ -805,15 +805,15 @@ function buildGeometry(
         ? 0.012 + rng() * 0.028
         : mobilityClass === 'loose'
           ? chapter === 'cooling'
-            ? 0.1 + rng() * 0.09
+            ? 0.14 + rng() * 0.13
             : chapter === 'stove'
-              ? 0.08 + rng() * 0.08
-              : 0.06 + rng() * 0.06
+              ? 0.11 + rng() * 0.11
+              : 0.085 + rng() * 0.085
           : chapter === 'cooling'
-            ? 0.26 + rng() * 0.18
+            ? 0.36 + rng() * 0.26
             : chapter === 'stove'
-              ? 0.24 + rng() * 0.16
-              : 0.22 + rng() * 0.16
+              ? 0.34 + rng() * 0.22
+              : 0.31 + rng() * 0.22
     const nominalMotionScale =
       GLASS_TIMING[chapter].motionScale *
       (chapter === 'call' || chapter === 'stove' || chapter === 'cooling'
