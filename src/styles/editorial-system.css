@@ -353,11 +353,17 @@ button { cursor: pointer; }
 }
 
 .intro-thread {
-  top: 48%;
+  top: 34%;
   left: 0;
+  z-index: 0;
   width: min(1180px, 78vw);
-  opacity: 0.5;
+  opacity: 0.44;
   transform: none;
+}
+
+.intro-archive-mark,
+.intro-content {
+  z-index: 2;
 }
 
 .intro-thread__path {
@@ -534,6 +540,36 @@ button { cursor: pointer; }
 
 .story-scene--cooling {
   background: radial-gradient(circle at 56% 56%, rgba(38, 79, 72, 0.08), transparent 42%), var(--color-bg-memory);
+}
+
+.story-scene--stove .call-meta {
+  opacity: 0.78;
+}
+
+.story-scene--stove .utility-controls {
+  opacity: 0.68;
+}
+
+.story-scene--cooling .call-meta,
+.story-scene--cooling .field-meta {
+  opacity: 0.55;
+}
+
+.story-scene--cooling .utility-controls {
+  opacity: 0.43;
+}
+
+.story-scene--cooling .chapter-note {
+  opacity: 0.62;
+}
+
+.story-scene--stove .utility-controls,
+.story-scene--cooling .utility-controls,
+.story-scene--stove .call-meta,
+.story-scene--cooling .call-meta,
+.story-scene--cooling .field-meta,
+.story-scene--cooling .chapter-note {
+  transition: opacity var(--duration-scene) var(--ease-soft);
 }
 
 .story-field {
@@ -1072,6 +1108,21 @@ button { cursor: pointer; }
   text-align: left;
 }
 
+.transition-field::before {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(168,68,50,.16) 22%, rgba(233,225,208,.08) 62%, transparent);
+  pointer-events: none;
+}
+
+.transition-scene--reality .transition-field::before {
+  background: linear-gradient(90deg, transparent, rgba(233,225,208,.07) 30%, rgba(168,68,50,.13) 74%, transparent);
+}
+
 .transition-field .sound-field {
   width: min(92rem, 94vw);
   height: clamp(18rem, 58vh, 40rem);
@@ -1105,7 +1156,15 @@ button { cursor: pointer; }
   left: var(--gutter);
   height: 1px;
   content: "";
-  background: linear-gradient(90deg, transparent, var(--color-line-weak) 16%, var(--color-line-weak) 84%, transparent);
+  background:
+    linear-gradient(90deg,
+      transparent 0 9%,
+      var(--color-line-weak) 9% 27%,
+      transparent 27% 43%,
+      var(--color-line-weak) 43% 58%,
+      transparent 58% 73%,
+      var(--color-line-weak) 73% 91%,
+      transparent 91%);
   pointer-events: none;
 }
 
@@ -1417,6 +1476,16 @@ button { cursor: pointer; }
   }
 }
 
+@media (min-width: 761px) and (max-width: 1100px) {
+  .intro-content h1 {
+    font-size: clamp(84px, 10.5vw, 108px);
+  }
+
+  .intro-thread {
+    top: 35%;
+  }
+}
+
 @media (max-width: 760px) {
   .experience {
     --gutter: 20px;
@@ -1510,10 +1579,10 @@ button { cursor: pointer; }
   }
 
   .intro-thread {
-    top: 44%;
+    top: 32%;
     left: -18vw;
     width: 132vw;
-    opacity: 0.48;
+    opacity: 0.44;
   }
 
   .intro-meta-rail {
