@@ -146,6 +146,7 @@ export function StoryScene({
   const [coolingAssistReadyFor, setCoolingAssistReadyFor] = useState<string | null>(null)
   const [finalContinueReadyFor, setFinalContinueReadyFor] = useState<string | null>(null)
   const [departingTermId, setDepartingTermId] = useState<string | null>(null)
+  const [questionPulse, setQuestionPulse] = useState(0)
   const playbackKind =
     playbackInfo?.termId === term.id ? playbackInfo.kind : null
   const playbackReadyForTerm = playbackInfo?.termId === term.id
@@ -422,6 +423,7 @@ export function StoryScene({
   }
 
   const explain = () => {
+    setQuestionPulse((value) => value + 1)
     setInteractionReadyKey(null)
     setHelperOpenFor(null)
     onDismissCallGuide()
@@ -607,6 +609,14 @@ export function StoryScene({
       className={`story-scene story-scene--${chapter.scene} ${isCall && termIndex === 0 ? 'story-scene--call-opening' : ''} ${isFinalCooling ? 'story-scene--final-memory' : ''}`}
       style={{ '--voice-level': audioLevel } as React.CSSProperties}
     >
+      {questionPulse > 0 && (
+        <span
+          key={questionPulse}
+          className="question-ripple"
+          aria-hidden="true"
+        />
+      )}
+
       <PhoneChrome
           timer={timer}
           stage={chapter.stage}
@@ -631,12 +641,20 @@ export function StoryScene({
         {!isFinalCooling && (
           <div className="field-meta">
             <span className="speaker-mark" aria-hidden="true" />
-            <span id="story-term-label">母亲的声音</span>
+            <span id="story-term-label" className="field-meta__speaker">母亲的声音</span>
+            <span className="field-meta__count" aria-hidden="true">
+              {String(termIndex + 1).padStart(2, '0')} / {String(chapter.terms.length).padStart(2, '0')}
+            </span>
             <span className="field-meta__state" aria-live="polite">
               {textState}
             </span>
           </div>
         )}
+        <div className="narrative-coordinate" aria-hidden="true">
+          <span className={chapter.scene === 'call' ? 'is-current' : ''}>01 现在</span>
+          <span className={chapter.scene === 'stove' ? 'is-current' : ''}>02 记忆里</span>
+          <span className={chapter.scene === 'cooling' ? 'is-current' : ''}>03 再早一点</span>
+        </div>
 
         {isCall && termIndex === 0 && callGuideVisible && (
           interactionReady ? (
@@ -766,7 +784,7 @@ export function StoryScene({
                         </button>
                         <button
                           type="button"
-                          className="quiet-button action-button--strong action-button--tool"
+                          className="quiet-button action-button--strong action-button--tool action-button--ask"
                           onClick={explain}
                           aria-label="没听清，再问母亲一句"
                         >

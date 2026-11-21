@@ -178,7 +178,7 @@ function makeCharLayout(
   forceHorizontal = false,
 ): CharCell[] {
   const chars = Array.from(text.replace(/\s+/g, ''))
-  const vertical = width < 660 && !forceHorizontal
+  const vertical = width < 660 && width / Math.max(1, height) < 1.35 && !forceHorizontal
   const cells: CharCell[] = []
 
   if (vertical) {

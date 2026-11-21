@@ -139,6 +139,10 @@ export function PrologueScene({ onBegin, onComplete }: PrologueSceneProps) {
     >
       <section className="prologue-content">
         <h1 className="sr-only">电话之前</h1>
+        <p className="prologue-meta" aria-hidden="true">
+          <span>01</span>
+          <span>电话之前 / BEFORE THE CALL</span>
+        </p>
         <span className="prologue-thread" aria-hidden="true" />
 
         <div className="prologue-sentences" aria-hidden="true">

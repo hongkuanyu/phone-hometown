@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { allTerms } from '../content/terms'
 import type { StoryTerm } from '../types'
 
 interface MeaningDrawerProps {
@@ -10,6 +11,9 @@ interface MeaningDrawerProps {
 export function MeaningDrawer({ term, explained, onClose }: MeaningDrawerProps) {
   const drawerRef = useRef<HTMLElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
+  const archiveIndex = allTerms.findIndex((entry) => entry.id === term.id) + 1
+  const archiveCount = String(archiveIndex > 0 ? archiveIndex : 1).padStart(2, '0')
+  const archiveTotal = String(allTerms.length).padStart(2, '0')
 
   useEffect(() => {
     closeRef.current?.focus()
@@ -50,10 +54,14 @@ export function MeaningDrawer({ term, explained, onClose }: MeaningDrawerProps) 
         aria-modal="true"
         aria-labelledby="meaning-title"
         aria-describedby="meaning-summary"
+        data-archive-index={`${archiveCount} / ${archiveTotal}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="meaning-drawer__header">
-          <span className="meaning-drawer__kicker">这句话</span>
+          <span className="meaning-drawer__kicker">
+            <span>家庭语言档案</span>
+            <span>FAMILY TRANSCRIPTION</span>
+          </span>
           <button
             ref={closeRef}
             type="button"

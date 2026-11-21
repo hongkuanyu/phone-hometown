@@ -74,8 +74,9 @@ export function IntroScene({
   const tracerRef = useRef<SVGPathElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const subtitleRef = useRef<HTMLParagraphElement>(null)
+  const identityRef = useRef<HTMLParagraphElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
-  const notesRef = useRef<HTMLParagraphElement>(null)
+  const notesRef = useRef<HTMLDivElement>(null)
   const aboutRef = useRef<HTMLButtonElement>(null)
   const assemblyRef = useRef<HTMLSpanElement>(null)
 
@@ -122,6 +123,7 @@ export function IntroScene({
           ) ?? [],
         )
         const subtitle = subtitleRef.current
+        const identity = identityRef.current
         const notes = notesRef.current
         const about = aboutRef.current
         const assembly = assemblyRef.current
@@ -131,6 +133,7 @@ export function IntroScene({
           !tracer ||
           titleLines.length < 2 ||
           !subtitle ||
+          !identity ||
           !notes ||
           !about ||
           !assembly
@@ -248,6 +251,22 @@ export function IntroScene({
             : [{ opacity: 0 }, { opacity: 1 }],
           {
             delay: motion.subtitleDelay,
+            duration: motion.subtitleDuration,
+            easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
+            fill: 'both',
+          },
+        )
+
+        animate(
+          identity,
+          fullMotion
+            ? [
+                { opacity: 0, transform: 'translate3d(0, 4px, 0)' },
+                { opacity: 1, transform: 'translate3d(0, 0, 0)' },
+              ]
+            : [{ opacity: 0 }, { opacity: 1 }],
+          {
+            delay: motion.subtitleDelay + 160,
             duration: motion.subtitleDuration,
             easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
             fill: 'both',
@@ -374,6 +393,11 @@ export function IntroScene({
         </svg>
       </div>
 
+      <p className="intro-archive-mark" aria-hidden="true">
+        <span>家庭声音档案</span>
+        <span>CHANGZHOU / 01</span>
+      </p>
+
       <section className="intro-content" aria-labelledby="intro-title">
         <h1 ref={titleRef} id="intro-title">
           {siteConfig.titleLines.map((line) => (
@@ -384,31 +408,43 @@ export function IntroScene({
         </h1>
         <p ref={subtitleRef} className="intro-subtitle">
           {introCopy.subtitle}
-          <span className="intro-identity">{introCopy.identity}</span>
         </p>
+        <p ref={identityRef} className="intro-identity">{introCopy.identity}</p>
 
         <div ref={actionsRef} className="intro-actions">
           <button
             type="button"
             className="intro-listen-button"
             onClick={handleStart}
+            tabIndex={isPlaying ? -1 : 0}
           >
             {introCopy.answer}
           </button>
         </div>
 
-        <p ref={notesRef} className="intro-listening-note">
-          {introCopy.listening}
-        </p>
-
-        <button
-          ref={aboutRef}
-          type="button"
-          className="intro-about"
-          onClick={onOpenAbout}
-        >
-          {introCopy.about}
-        </button>
+        <div ref={notesRef} className="intro-meta-rail" aria-label="作品信息">
+          <span className="intro-meta-item">
+            <span className="intro-meta-key">地点</span>
+            <strong>常州</strong>
+          </span>
+          <span className="intro-meta-item">
+            <span className="intro-meta-key">母亲录音</span>
+            <strong>17 段</strong>
+          </span>
+          <span className="intro-meta-item intro-listening-note">
+            <span className="intro-meta-key">聆听</span>
+            <strong>{introCopy.listening}</strong>
+          </span>
+          <button
+            ref={aboutRef}
+            type="button"
+            className="intro-about"
+            onClick={onOpenAbout}
+            tabIndex={isPlaying ? -1 : 0}
+          >
+            {introCopy.about}
+          </button>
+        </div>
       </section>
 
       <span ref={assemblyRef} className="intro-assembly" aria-hidden="true" />

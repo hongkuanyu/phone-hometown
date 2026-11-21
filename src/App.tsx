@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
+import './styles/editorial-system.css'
 import { NarrativeAudio } from './audio/NarrativeAudio'
 import { GLASS_TIMING } from './config/glassTiming'
 import { AboutScene } from './components/AboutScene'
