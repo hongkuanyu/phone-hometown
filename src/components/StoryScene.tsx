@@ -64,16 +64,18 @@ function TimedGuide({
   visible,
   text,
   onDismiss,
+  durationMs = 8000,
 }: {
   visible: boolean
   text: string
   onDismiss: () => void
+  durationMs?: number
 }) {
   useEffect(() => {
     if (!visible) return
-    const timer = window.setTimeout(onDismiss, 8000)
+    const timer = window.setTimeout(onDismiss, durationMs)
     return () => window.clearTimeout(timer)
-  }, [onDismiss, visible])
+  }, [durationMs, onDismiss, visible])
 
   return (
     <div
@@ -139,7 +141,7 @@ export function StoryScene({
     termId: string
     kind: 'recording' | 'placeholder'
   } | null>(null)
-  const [helperReadyFor, setHelperReadyFor] = useState<string | null>(null)
+  const [interactionReadyKey, setInteractionReadyKey] = useState<string | null>(null)
   const [helperOpenFor, setHelperOpenFor] = useState<string | null>(null)
   const [coolingAssistReadyFor, setCoolingAssistReadyFor] = useState<string | null>(null)
   const [finalContinueReadyFor, setFinalContinueReadyFor] = useState<string | null>(null)
@@ -158,7 +160,9 @@ export function StoryScene({
   const isCooling = chapter.scene === 'cooling'
   const isCall = chapter.scene === 'call'
   const isFinalCooling = isCooling && termIndex === chapter.terms.length - 1
-  const helperReady = helperReadyFor === term.id
+  const interactionKey = `${term.id}:${pulse}`
+  const interactionReady = interactionReadyKey === interactionKey
+  const helperReady = interactionReady
   const helperOpen = helperOpenFor === term.id
   const coolingAssistReady =
     isCooling && !isFinalCooling && coolingAssistReadyFor === term.id
@@ -234,56 +238,97 @@ export function StoryScene({
   }, [speaking, speakingDuration, speakingTick])
 
   useEffect(() => {
-    if (isFinalCooling || speaking || audioPaused || audioMuted) return
     if (!playbackReadyForTerm) return
-    const delay = isCall ? (termIndex === 0 ? 1400 : 900) : isCooling ? 1700 : 1100
-    const timer = window.setTimeout(() => setHelperReadyFor(term.id), delay)
-    return () => window.clearTimeout(timer)
+
+    let frame = 0
+    let unlockTimer: number | null = null
+    let cancelled = false
+    let sawRelevantPlayback = false
+    const startedWatchingAt = performance.now()
+
+    const scheduleUnlock = () => {
+      if (cancelled || unlockTimer !== null) return
+      unlockTimer = window.setTimeout(
+        () => {
+          if (!cancelled) setInteractionReadyKey(interactionKey)
+        },
+        reducedMotion ? 120 : 550,
+      )
+    }
+
+    const watch = () => {
+      if (cancelled) return
+      const snapshot = getVoicePlayback()
+      const relevant =
+        snapshot.kind === 'main' ||
+        snapshot.kind === 'supplement' ||
+        snapshot.kind === 'placeholder'
+
+      if (relevant && snapshot.active && !snapshot.paused) {
+        sawRelevantPlayback = true
+      }
+
+      const ended =
+        relevant &&
+        sawRelevantPlayback &&
+        (snapshot.ended || !snapshot.active)
+
+      if (ended && !snapshot.paused) {
+        scheduleUnlock()
+        return
+      }
+
+      if (
+        playbackKind === 'placeholder' &&
+        !sawRelevantPlayback &&
+        performance.now() - startedWatchingAt > 1200
+      ) {
+        scheduleUnlock()
+        return
+      }
+
+      frame = window.requestAnimationFrame(watch)
+    }
+
+    frame = window.requestAnimationFrame(watch)
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(frame)
+      if (unlockTimer !== null) window.clearTimeout(unlockTimer)
+    }
   }, [
-    audioMuted,
-    audioPaused,
-    isCall,
-    isCooling,
-    isFinalCooling,
+    getVoicePlayback,
+    interactionKey,
+    playbackKind,
     playbackReadyForTerm,
-    speaking,
+    pulse,
+    reducedMotion,
     term.id,
-    termIndex,
   ])
 
   useEffect(() => {
-    if (!isCooling || isFinalCooling || speaking || audioPaused) return
-    if (!playbackReadyForTerm) return
+    if (!isCooling || isFinalCooling || !interactionReady) return
     const timer = window.setTimeout(
       () => setCoolingAssistReadyFor(term.id),
-      1900,
+      reducedMotion ? 250 : 900,
     )
     return () => window.clearTimeout(timer)
   }, [
-    audioPaused,
+    interactionReady,
     isCooling,
     isFinalCooling,
-    playbackReadyForTerm,
-    speaking,
+    reducedMotion,
     term.id,
   ])
 
   useEffect(() => {
-    if (!isFinalCooling || speaking || audioPaused) return
-    if (!playbackReadyForTerm) return
+    if (!isFinalCooling || !interactionReady) return
     const timer = window.setTimeout(
       () => setFinalContinueReadyFor(term.id),
-      reducedMotion ? 2400 : 6200,
+      reducedMotion ? 1500 : 4200,
     )
     return () => window.clearTimeout(timer)
-  }, [
-    audioPaused,
-    isFinalCooling,
-    playbackReadyForTerm,
-    reducedMotion,
-    speaking,
-    term.id,
-  ])
+  }, [interactionReady, isFinalCooling, reducedMotion, term.id])
 
   useEffect(() => {
     termRef.current = term
@@ -353,6 +398,8 @@ export function StoryScene({
     }
   }, [chapter.scene, isCooling, mic, onFollowActiveChange])
   const replay = () => {
+    setInteractionReadyKey(null)
+    setHelperOpenFor(null)
     onDismissCallGuide()
     onDismissSoundGuide()
     onChoice({ scene: chapter.scene, type: 'replay', termId: term.id })
@@ -375,6 +422,8 @@ export function StoryScene({
   }
 
   const explain = () => {
+    setInteractionReadyKey(null)
+    setHelperOpenFor(null)
     onDismissCallGuide()
     onDismissSoundGuide()
     onChoice({ scene: chapter.scene, type: 'explain', termId: term.id })
@@ -558,8 +607,7 @@ export function StoryScene({
       className={`story-scene story-scene--${chapter.scene} ${isCall && termIndex === 0 ? 'story-scene--call-opening' : ''} ${isFinalCooling ? 'story-scene--final-memory' : ''}`}
       style={{ '--voice-level': audioLevel } as React.CSSProperties}
     >
-      {(!isFinalCooling || audioPaused) && (
-        <PhoneChrome
+      <PhoneChrome
           timer={timer}
           stage={chapter.stage}
         audioMuted={audioMuted}
@@ -578,7 +626,6 @@ export function StoryScene({
           onRestartChapter={onRestartChapter}
           onOpenAbout={onOpenAbout}
         />
-      )}
 
       <section className="story-field" aria-label="母亲的声音">
         {!isFinalCooling && (
@@ -591,12 +638,19 @@ export function StoryScene({
           </div>
         )}
 
-        {isCall && termIndex === 0 && helperReady && callGuideVisible && (
-          <TimedGuide
-            visible
-            text={callGuideText}
-            onDismiss={onDismissCallGuide}
-          />
+        {isCall && termIndex === 0 && callGuideVisible && (
+          interactionReady ? (
+            <TimedGuide
+              visible
+              text={callGuideText}
+              durationMs={5000}
+              onDismiss={onDismissCallGuide}
+            />
+          ) : (
+            <div className="scene-guide scene-guide--listening" aria-live="polite">
+              <p>先听她说完。</p>
+            </div>
+          )
         )}
 
         <SoundTextCanvas
@@ -619,7 +673,11 @@ export function StoryScene({
           restored={isRestored}
           restorationSource={activeRestorationSource}
           guideActive={false}
-          onTermClick={isFinalCooling ? undefined : () => openMeaning('term')}
+          onTermClick={
+            isFinalCooling || !interactionReady
+              ? undefined
+              : () => openMeaning('term')
+          }
           fragmentBias={isDeparting ? 0.35 : 0}
           chapter={chapter.scene}
           fractureMode="voice"
@@ -653,18 +711,19 @@ export function StoryScene({
                 {term.mandarinHint}
               </p>
             )}
-            {isExplained && (
+            {interactionReady && isExplained && (
               <p className="explanation-trace" aria-live="polite">
                 <span>母亲又说</span>
                 {term.supplement}
               </p>
             )}
 
-            <div
-              className="action-dock"
-              role="group"
-              aria-label="当前这句话的操作"
-            >
+            {interactionReady && (
+              <div
+                className="action-dock action-dock--ready"
+                role="group"
+                aria-label="当前这句话的操作"
+              >
               <div className="sentence-assist">
                 {helperReady && (
                   <>
@@ -745,7 +804,8 @@ export function StoryScene({
                   让这一句过去
                 </button>
               </div>
-            </div>
+              </div>
+            )}
           </section>
 
           {coolingAssistReady && (
