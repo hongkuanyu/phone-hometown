@@ -3049,3 +3049,94 @@ button { cursor: pointer; }
     transform: none;
   }
 }
+
+/* Keep attention on listening and replay; advancing is a quiet exit from the sentence. */
+.action-dock .sentence-assist__quick {
+  gap: 1.1rem;
+}
+
+.action-dock .sentence-assist__quick::before {
+  width: 1.35rem;
+  background: rgba(168, 68, 50, 0.82);
+}
+
+.action-dock .sentence-helper-prompt {
+  color: #b7ae9f;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+}
+
+.action-dock .sentence-quick-replay {
+  color: #ded4c4;
+  font-size: 0.94rem;
+  letter-spacing: 0.025em;
+}
+
+.action-dock .sentence-helper-prompt:hover,
+.action-dock .sentence-helper-prompt:focus-visible,
+.action-dock .sentence-quick-replay:hover,
+.action-dock .sentence-quick-replay:focus-visible {
+  color: var(--color-ink);
+  border-bottom-color: rgba(233, 225, 208, 0.56);
+}
+
+.action-dock .action-button--advance,
+.story-scene--stove .action-dock .action-button--advance,
+.story-scene--cooling .action-dock .action-button--advance {
+  height: auto;
+  min-height: 2.75rem;
+  padding: 0.35rem 0;
+  color: #968d80;
+  font-size: 0.76rem;
+  letter-spacing: 0.055em;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(233, 225, 208, 0.16);
+}
+
+.action-dock .action-button--advance:hover,
+.story-scene--stove .action-dock .action-button--advance:hover,
+.story-scene--cooling .action-dock .action-button--advance:hover {
+  color: #d8cebf;
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: rgba(233, 225, 208, 0.48);
+  transform: translateX(2px);
+}
+
+.action-dock .action-button--advance:active,
+.story-scene--stove .action-dock .action-button--advance:active,
+.story-scene--cooling .action-dock .action-button--advance:active {
+  color: var(--color-ink);
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: rgba(233, 225, 208, 0.62);
+  transform: translateX(1px);
+}
+
+.action-dock .action-button--advance:focus-visible,
+.story-scene--stove .action-dock .action-button--advance:focus-visible,
+.story-scene--cooling .action-dock .action-button--advance:focus-visible {
+  outline: 1px solid rgba(233, 225, 208, 0.72);
+  outline-offset: 3px;
+}
+
+@media (max-width: 760px) {
+  .action-dock .sentence-assist__quick {
+    gap: 0.9rem;
+  }
+
+  .action-dock .sentence-helper-prompt {
+    font-size: 0.78rem;
+  }
+
+  .action-dock .sentence-quick-replay {
+    font-size: 0.9rem;
+  }
+
+  .action-dock .action-button--advance {
+    min-height: 2.75rem;
+    padding: 0.35rem 0;
+    font-size: 0.76rem;
+  }
+}
