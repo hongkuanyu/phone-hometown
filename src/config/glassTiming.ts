@@ -26,7 +26,7 @@ export const GLASS_TIMING = {
     crackDuration: 110,
     burstDuration: 400,
     settleDuration: 220,
-    motionScale: 0.76,
+    motionScale: 0.46,
   },
   stove: {
     readingHold: 400,
@@ -34,7 +34,7 @@ export const GLASS_TIMING = {
     crackDuration: 120,
     burstDuration: 420,
     settleDuration: 180,
-    motionScale: 0.84,
+    motionScale: 0.53,
   },
   cooling: {
     readingHold: 320,
@@ -42,7 +42,7 @@ export const GLASS_TIMING = {
     crackDuration: 100,
     burstDuration: 380,
     settleDuration: 140,
-    motionScale: 1.1,
+    motionScale: 0.61,
   },
   transition: {
     readingHold: 300,
@@ -50,7 +50,7 @@ export const GLASS_TIMING = {
     crackDuration: 110,
     burstDuration: 360,
     settleDuration: 160,
-    motionScale: 0.9,
+    motionScale: 0.54,
   },
   ending: {
     readingHold: 420,
@@ -58,7 +58,7 @@ export const GLASS_TIMING = {
     crackDuration: 180,
     burstDuration: 470,
     settleDuration: 350,
-    motionScale: 0.96,
+    motionScale: 0.62,
   },
   reduced: {
     readingHold: 250,
@@ -66,7 +66,7 @@ export const GLASS_TIMING = {
     crackDuration: 80,
     burstDuration: 180,
     settleDuration: 130,
-    motionScale: 0.22,
+    motionScale: 0.18,
   },
   onset: {
     attackSeconds: 0.05,
@@ -78,8 +78,8 @@ export const GLASS_TIMING = {
     boostDurationMs: 260,
   },
   replay: {
-    recombineMs: 90,
-    replayHoldMs: 80,
+    recombineMs: 260,
+    replayHoldMs: 140,
   },
 } as const
 

@@ -51,11 +51,16 @@ interface FragmentBounds {
   height: number
 }
 
+type FragmentMobility = 'anchor' | 'loose' | 'lost'
+
 interface GlassFragment {
   polygon: Point[]
   centroid: Point
   bounds: FragmentBounds
   depth: number
+  mobilityRank: number
+  mobilityClass: FragmentMobility
+  characterBias: number
   motionX: number
   motionY: number
   rotation: number
@@ -439,11 +444,11 @@ function makeFragmentSprite(
   context.globalCompositeOperation = 'source-atop'
   context.strokeStyle =
     tint === 'voice'
-      ? 'rgba(255, 255, 250, 0.58)'
+      ? 'rgba(255, 255, 250, 0.52)'
       : tint === 'rhythm'
-        ? 'rgba(214, 202, 184, 0.5)'
-        : 'rgba(168, 68, 50, 0.48)'
-  context.lineWidth = tint === 'base' ? 0.52 : 0.65
+        ? 'rgba(214, 202, 184, 0.42)'
+        : 'rgba(205, 193, 174, 0.16)'
+  context.lineWidth = tint === 'base' ? 0.38 : 0.58
   tracePolygon(context, polygon)
   context.stroke()
   context.globalCompositeOperation = 'source-over'
@@ -514,10 +519,10 @@ function makeCrackLayers(
       context.moveTo(edge.start.x, edge.start.y)
       context.lineTo(edge.end.x, edge.end.y)
       context.strokeStyle =
-        rng() > 0.78
-          ? 'rgba(168, 68, 50, 0.58)'
-          : 'rgba(205, 193, 174, 0.56)'
-      context.lineWidth = 0.44 + rng() * 0.28
+        rng() > 0.88
+          ? 'rgba(168, 68, 50, 0.34)'
+          : 'rgba(205, 193, 174, 0.36)'
+      context.lineWidth = 0.26 + rng() * 0.18
       context.stroke()
     }
 
@@ -656,20 +661,23 @@ function buildGeometry(
     '#D7CBB9',
   )
   const glyphOutlineSurface = drawGlyphOutlineSurface(width, height, dpr, chars)
-  const seed = hashString(`${text}|${chapter}|glass-v3`)
+  const seed = hashString(`${text}|${chapter}|glass-v4`)
   const rng = mulberry32(seed)
+  const characterBias = chars.map((char, index) =>
+    (mulberry32(seed ^ hashString(`${char.char}|${index}|timeline`))() * 2 - 1) * 0.045,
+  )
   const isMobile = width < 660
   const averageCharSize = chars.reduce((sum, char) => sum + char.size, 0) / chars.length
-  const perCharTarget = chapter === 'call' ? 28 : chapter === 'stove' ? 32 : chapter === 'cooling' ? 36 : 34
-  const mobilePerCharTarget = chapter === 'call' ? 16 : chapter === 'stove' ? 18 : chapter === 'cooling' ? 20 : 18
-  const desktopBudget = chapter === 'cooling' ? 200 : 180
-  const mobileBudget = chapter === 'cooling' ? 108 : 96
+  const perCharTarget = chapter === 'call' ? 30 : chapter === 'stove' ? 34 : chapter === 'cooling' ? 38 : 34
+  const mobilePerCharTarget = chapter === 'call' ? 17 : chapter === 'stove' ? 19 : chapter === 'cooling' ? 21 : 18
+  const desktopBudget = chapter === 'call' ? 120 : chapter === 'stove' ? 135 : chapter === 'cooling' ? 150 : 132
+  const mobileBudget = chapter === 'call' ? 65 : chapter === 'stove' ? 72 : chapter === 'cooling' ? 80 : 68
   const baseTarget = isMobile ? chars.length * mobilePerCharTarget : chars.length * perCharTarget
-  const budget = reducedMotion ? (isMobile ? 54 : 96) : isMobile ? mobileBudget : desktopBudget
-  const effectiveTarget = baseTarget * (reducedMotion ? 0.58 : 1)
+  const budget = reducedMotion ? (isMobile ? 42 : 72) : isMobile ? mobileBudget : desktopBudget
+  const effectiveTarget = baseTarget * (reducedMotion ? 0.48 : 1)
   const seedCount = clamp(
     Math.round(effectiveTarget),
-    reducedMotion ? (isMobile ? 24 : 48) : isMobile ? 36 : 96,
+    reducedMotion ? (isMobile ? 20 : 40) : isMobile ? 44 : 96,
     budget,
   )
   const glyphReadContext = glyphSurface.getContext('2d', {
@@ -783,12 +791,40 @@ function buildGeometry(
     }
     const baseSprite = makeFragmentSprite(glyphSurface, bounds, polygon, dpr, 'base')
     const depth = rng() * 2 - 1
-    const roll = rng()
-    const distanceFactor = roll < 0.15 ? 0.05 + rng() * 0.1 : roll < 0.7 ? 0.25 + rng() * 0.35 : 0.65 + rng() * 0.45
-    const referenceSize = averageCharSize * (isMobile ? 0.82 : 1)
-    const distance = referenceSize * distanceFactor
+    const mobilityRank = rng()
+    const anchorRatio = chapter === 'cooling' ? 0.54 : chapter === 'stove' ? 0.57 : 0.6
+    const looseRatio = chapter === 'cooling' ? 0.3 : 0.29
+    const mobilityClass: FragmentMobility =
+      mobilityRank < anchorRatio
+        ? 'anchor'
+        : mobilityRank < anchorRatio + looseRatio
+          ? 'loose'
+          : 'lost'
+    const finalDistanceFactor =
+      mobilityClass === 'anchor'
+        ? 0.012 + rng() * 0.028
+        : mobilityClass === 'loose'
+          ? chapter === 'cooling'
+            ? 0.1 + rng() * 0.09
+            : chapter === 'stove'
+              ? 0.08 + rng() * 0.08
+              : 0.06 + rng() * 0.06
+          : chapter === 'cooling'
+            ? 0.26 + rng() * 0.18
+            : chapter === 'stove'
+              ? 0.24 + rng() * 0.16
+              : 0.22 + rng() * 0.16
+    const nominalMotionScale =
+      GLASS_TIMING[chapter].motionScale *
+      (chapter === 'call' || chapter === 'stove' || chapter === 'cooling'
+        ? voiceDistanceScale
+        : 1)
+    const referenceSize = averageCharSize * (isMobile ? 0.88 : 1)
+    const distance = (referenceSize * finalDistanceFactor) / nominalMotionScale
     let nearestImpact = impacts[0]
     let nearestDistance = Infinity
+    let nearestCharIndex = 0
+    let nearestCharDistance = Infinity
     for (const impact of impacts) {
       const candidate = Math.hypot(centroid.x - impact.x, centroid.y - impact.y)
       if (candidate < nearestDistance) {
@@ -796,12 +832,21 @@ function buildGeometry(
         nearestImpact = impact
       }
     }
+    for (let charIndex = 0; charIndex < chars.length; charIndex += 1) {
+      const char = chars[charIndex]
+      const candidate = Math.hypot(centroid.x - char.x, centroid.y - char.y)
+      if (candidate < nearestCharDistance) {
+        nearestCharDistance = candidate
+        nearestCharIndex = charIndex
+      }
+    }
     const baseAngle = nearestDistance > 1 ? Math.atan2(centroid.y - nearestImpact.y, centroid.x - nearestImpact.x) : rng() * Math.PI * 2
-    const angle = baseAngle + (rng() * 2 - 1) * 0.52
+    const angle = baseAngle + (rng() * 2 - 1) * 0.42
     const tangentSign = rng() > 0.5 ? 1 : -1
-    let motionX = Math.cos(angle) * distance + Math.cos(baseAngle + Math.PI / 2) * distance * tangentSign * (0.08 + rng() * 0.15)
-    let motionY = Math.sin(angle) * distance + Math.sin(baseAngle + Math.PI / 2) * distance * tangentSign * (0.08 + rng() * 0.15) + referenceSize * (0.025 + rng() * 0.07)
-    if (chapter === 'stove') motionY += referenceSize * (0.03 + rng() * 0.05)
+    let motionX = Math.cos(angle) * distance + Math.cos(baseAngle + Math.PI / 2) * distance * tangentSign * (0.05 + rng() * 0.1)
+    let motionY = Math.sin(angle) * distance + Math.sin(baseAngle + Math.PI / 2) * distance * tangentSign * (0.05 + rng() * 0.1) + referenceSize * (0.004 + rng() * 0.012)
+    if (chapter === 'stove') motionY -= referenceSize * (0.003 + rng() * 0.009)
+    if (chapter === 'cooling') motionX += referenceSize * (0.006 + rng() * 0.014)
     let safeScale = 1
     const padding = 10
     const minDx = padding - bounds.left
@@ -812,24 +857,34 @@ function buildGeometry(
     if (motionX < 0) safeScale = Math.min(safeScale, Math.max(0, minDx / motionX))
     if (motionY > 0) safeScale = Math.min(safeScale, Math.max(0, maxDy / motionY))
     if (motionY < 0) safeScale = Math.min(safeScale, Math.max(0, minDy / motionY))
-    safeScale = clamp(safeScale, 0.18, 1)
+    safeScale = clamp(safeScale, 0.24, 1)
     motionX *= safeScale
     motionY *= safeScale
+    const maxRotation =
+      mobilityClass === 'lost' ? 0.074 : mobilityClass === 'loose' ? 0.045 : 0.025
     fragments.push({
       polygon,
       centroid,
       bounds,
       depth,
+      mobilityRank,
+      mobilityClass,
+      characterBias: characterBias[nearestCharIndex] ?? 0,
       motionX,
       motionY,
-      rotation: (rng() * 2 - 1) * (isMobile ? 0.08 : 0.14),
+      rotation: (rng() * 2 - 1) * maxRotation * (isMobile ? 0.86 : 1),
       phase: rng() * Math.PI * 2,
       restoreRank: rng(),
       startDelay: 20 + rng() * 50,
-      voiceDelay: rng() * 0.13,
-      opacity: 0.7 + rng() * 0.24,
-      scale: 1 + depth * 0.022,
-      drift: 0.25 + rng() * 0.8,
+      voiceDelay: rng() * 0.18,
+      opacity:
+        mobilityClass === 'lost'
+          ? 0.78 + rng() * 0.14
+          : mobilityClass === 'loose'
+            ? 0.84 + rng() * 0.12
+            : 0.9 + rng() * 0.08,
+      scale: 1 + depth * 0.018,
+      drift: (chapter === 'cooling' ? 0.34 : 0.2) + rng() * 0.42,
       drawX: bounds.left - centroid.x,
       drawY: bounds.top - centroid.y,
       width: bounds.width,
@@ -920,6 +975,7 @@ export function SoundTextCanvas({
   const recombineRef = useRef<{ start: number; fromPostHold: number } | null>(null)
   const stateKeyRef = useRef<string | null>(null)
   const replayTokenRef = useRef(replayToken)
+  const hasReplayedRef = useRef(false)
   const frozenRenderTimeRef = useRef<number | null>(null)
   const frozenLevelRef = useRef(0)
 
@@ -959,6 +1015,7 @@ export function SoundTextCanvas({
   useEffect(() => {
     if (stateKeyRef.current === stateKey) return
     stateKeyRef.current = stateKey
+    hasReplayedRef.current = false
     const now = performance.now()
     const timing = reducedMotion ? GLASS_TIMING.reduced : GLASS_TIMING[chapter]
     pulseRef.current = now
@@ -978,6 +1035,7 @@ export function SoundTextCanvas({
   useEffect(() => {
     if (replayTokenRef.current === replayToken) return
     replayTokenRef.current = replayToken
+    hasReplayedRef.current = true
     const now = performance.now()
     pulseRef.current = now
     readingHoldRef.current = GLASS_TIMING.replay.replayHoldMs
@@ -1108,7 +1166,6 @@ export function SoundTextCanvas({
         glyphResidueSurface,
         glyphOutlineSurface,
         crackLayers,
-        impacts,
       } = geometry
       context.clearRect(0, 0, width, height)
 
@@ -1128,9 +1185,8 @@ export function SoundTextCanvas({
         current.fractureMode === 'voice' && debugValue !== null
           ? clamp(debugValue / 100, 0, 1)
           : null
-      const mediaProgress = realVoiceClock
-        ? debugVoiceProgress ??
-          clamp(
+      const audioProgress = realVoiceClock
+        ? clamp(
             (voiceSnapshot?.positionSec ?? 0) /
               Math.max(0.001, voiceSnapshot?.durationSec ?? 1),
             0,
@@ -1147,6 +1203,11 @@ export function SoundTextCanvas({
             0.2,
           )
         : 0
+      const mediaProgress =
+        debugVoiceProgress !== null
+          ? readableHoldFraction +
+            debugVoiceProgress * (1 - readableHoldFraction)
+          : audioProgress
       const fractureProgress =
         mediaProgress !== null
           ? clamp(
@@ -1274,18 +1335,28 @@ export function SoundTextCanvas({
       let separation = 0
       let settle = 0
       let shatter = 0
+      const replayScar =
+        current.fractureMode === 'voice' && hasReplayedRef.current && !recombineActive
+          ? 1
+          : 0
       if (useVoiceTimeline) {
         const progress = fractureProgress ?? 0
-        const impact = clamp(progress / 0.1, 0, 1)
-        const crackExpansion = clamp((progress - 0.1) / 0.2, 0, 1)
-        crackProgress = impact * 0.18 + easeOutCubic(crackExpansion) * 0.82
+        const firstCracks = clamp((progress - 0.12) / 0.18, 0, 1)
+        const laterCracks = clamp((progress - 0.3) / 0.55, 0, 1)
+        crackProgress =
+          firstCracks * 0.28 + easeInOutCubic(laterCracks) * 0.72
         separation =
           progress < 0.55
             ? easeInOutCubic(clamp((progress - 0.3) / 0.25, 0, 1)) * 0.35
             : 0.35 +
-              easeOutCubic(clamp((progress - 0.55) / 0.3, 0, 1)) * 0.65
+              easeInOutCubic(clamp((progress - 0.55) / 0.3, 0, 1)) * 0.65
         settle = clamp((progress - 0.85) / 0.15, 0, 1)
-        shatter = separation * (0.82 + easeOutCubic(settle) * 0.18)
+        shatter = separation
+        if (replayScar > 0) {
+          crackProgress = Math.max(crackProgress, 0.04)
+          separation = Math.max(separation, 0.035)
+          shatter = Math.max(shatter, 0.035)
+        }
         debugElapsedRef.current = progress * debugBreakDuration
       } else {
         const impactPhase = clamp(postHold / timing.impactDuration, 0, 1)
@@ -1350,12 +1421,12 @@ export function SoundTextCanvas({
         : 0
       const directGlyphAlpha = showFragments ? (1 - fragmentReveal) * 0.92 : 0.92
       const crackVisibility =
-        1 - clamp(separation * 0.78 + settle * 0.16, 0, 0.94)
+        1 - clamp(separation * 0.5 + settle * 0.08, 0, 0.72)
       const stressJitter =
         crackProgress *
-        (0.5 + voice * 1.8) *
-        (current.reducedMotion ? 0.25 : 1) *
-        (useVoiceTimeline ? 1 - (fractureProgress ?? 0) * 0.85 : 1)
+        (0.12 + voice * 0.5) *
+        (current.reducedMotion ? 0.22 : 1) *
+        (useVoiceTimeline ? 1 - (fractureProgress ?? 0) * 0.82 : 1)
       lastPostHoldRef.current = useVoiceTimeline
         ? debugBreakDuration * (fractureProgress ?? 0)
         : postHold
@@ -1366,7 +1437,7 @@ export function SoundTextCanvas({
           : useVoiceTimeline
             ? (fractureProgress ?? 0) <= 0.001
               ? 'intact'
-              : (fractureProgress ?? 0) < 0.1
+              : (fractureProgress ?? 0) < 0.12
                 ? 'stressed'
                 : (fractureProgress ?? 0) < 0.3
                   ? 'cracked'
@@ -1414,60 +1485,25 @@ export function SoundTextCanvas({
         context.globalAlpha = 1
       }
 
-      if (showFragments) {
+      if (
+        showFragments &&
+        (crackProgress > 0.001 || restorationEnergy > 0.01)
+      ) {
         // Stable semantic residue: recognizable, but never a crisp subtitle layer.
-        const ghostFade = 1 - settle * 0.08
+        const ghostFade = 1 - settle * 0.045
         context.globalAlpha = clamp(
-          (0.15 + restorationEnergy * 0.025) * ghostFade,
-          0.12,
-          0.18,
+          (0.105 + restorationEnergy * 0.012) * ghostFade,
+          0.08,
+          0.13,
         )
         context.drawImage(glyphResidueSurface, 0, 0, width, height)
         context.globalAlpha = clamp(
-          (0.26 + restorationEnergy * 0.02) * ghostFade,
-          0.22,
-          0.3,
+          (0.18 + restorationEnergy * 0.012) * ghostFade,
+          0.14,
+          0.21,
         )
         context.drawImage(glyphOutlineSurface, 0, 0, width, height)
         context.globalAlpha = 1
-      }
-
-      const crackAlphas = [
-        clamp(crackProgress / 0.12, 0, 1),
-        clamp((crackProgress - 0.32) / 0.3, 0, 1),
-        clamp((crackProgress - 0.62) / 0.38, 0, 1),
-      ]
-      for (let index = 0; index < crackLayers.length; index += 1) {
-        const alpha = crackAlphas[index] ?? 0
-        if (alpha <= 0 || crackVisibility <= 0.01) continue
-        context.globalAlpha = alpha * 0.78 * crackVisibility * (0.92 + voice * 0.08)
-        context.drawImage(crackLayers[index], 0, 0, width, height)
-      }
-      context.globalAlpha = 1
-
-      const flash = useVoiceTimeline
-        ? clamp(1 - (fractureProgress ?? 0) / 0.1, 0, 1)
-        : fractureElapsed >= readingHoldRef.current &&
-            fractureElapsed < readingHoldRef.current + timing.impactDuration
-          ? 1 -
-            (fractureElapsed - readingHoldRef.current) / timing.impactDuration
-          : 0
-      if (flash > 0) {
-        for (const impact of impacts) {
-          const gradient = context.createRadialGradient(
-            impact.x,
-            impact.y,
-            0,
-            impact.x,
-            impact.y,
-            24 + flash * 16,
-          )
-          gradient.addColorStop(0, `rgba(250, 243, 228, ${0.24 * flash})`)
-          gradient.addColorStop(0.24, `rgba(168, 68, 50, ${0.14 * flash})`)
-          gradient.addColorStop(1, 'rgba(168, 68, 50, 0)')
-          context.fillStyle = gradient
-          context.fillRect(impact.x - 42, impact.y - 42, 84, 84)
-        }
       }
 
       if (showFragments && fragmentReveal > 0.001) {
@@ -1476,18 +1512,17 @@ export function SoundTextCanvas({
           let localSettle = 0
           if (recombineActive) {
             localSettle = settle
-            localBreak =
-              easeOutCubic(separation) *
-              (0.64 + easeOutCubic(localSettle) * 0.36)
+            localBreak = easeInOutCubic(separation)
           } else if (useVoiceTimeline) {
             const progress = fractureProgress ?? 0
             const releaseStart = 0.3 + fragment.voiceDelay
             const localProgress = clamp(
-              (progress - releaseStart) / Math.max(0.001, 1 - releaseStart),
+              (progress + fragment.characterBias - releaseStart) /
+                Math.max(0.001, 0.85 - releaseStart),
               0,
               1,
             )
-            localBreak = easeOutCubic(localProgress)
+            localBreak = easeInOutCubic(localProgress)
             localSettle = clamp((progress - 0.85) / 0.15, 0, 1)
           } else {
             const localPostHold = Math.max(
@@ -1509,37 +1544,36 @@ export function SoundTextCanvas({
               0,
               1,
             )
-            localBreak =
-              easeOutCubic(localSeparation) *
-              (0.64 + easeOutCubic(localSettle) * 0.36)
+            localBreak = easeInOutCubic(localSeparation)
           }
-          const localMotionFactor = recombineActive
-            ? motionFactor
-            : clamp(localBreak + current.fragmentBias, 0, 1.25) *
-              timing.motionScale *
-              (useVoiceTimeline ? voiceDistanceScale : 1)
-          const restoredActive = fragment.restoreRank < restorationEnergy
+          if (replayScar > 0) localBreak = Math.max(localBreak, 0.035)
+          const localMotionFactor =
+            clamp(localBreak + current.fragmentBias, 0, 1.25) *
+            timing.motionScale *
+            (useVoiceTimeline ? voiceDistanceScale : 1)
+          const restoredActive =
+            fragment.restoreRank < clamp(restorationEnergy * 0.64, 0, 0.5)
           const restorePull = restoredActive
-            ? clamp(restorationEnergy * 1.16, 0, 1)
-            : clamp(restorationEnergy * 0.14, 0, 0.2)
+            ? clamp(0.28 + restorationEnergy * 1.5, 0, 0.94)
+            : 0
           const voiceDriftFade = useVoiceTimeline ? 1 - localSettle : 1
           const suspend =
             localSettle > 0
               ? Math.sin(time * 0.38 + fragment.phase) *
                 fragment.drift *
-                (current.reducedMotion ? 0.2 : 1.2) *
+                (current.reducedMotion ? 0.12 : 0.72) *
                 voiceDriftFade
               : 0
           const lift =
             localSettle > 0
               ? Math.cos(time * 0.31 + fragment.phase * 1.4) *
                 fragment.drift *
-                (current.reducedMotion ? 0.18 : 0.85) *
+                (current.reducedMotion ? 0.1 : 0.5) *
                 voiceDriftFade
               : 0
           const onsetKick =
             onsetBoost *
-            (0.035 + (fragment.depth + 1) * 0.025) *
+            (0.01 + (fragment.depth + 1) * 0.008) *
             (useVoiceTimeline ? 1 - (fractureProgress ?? 0) : 1)
           const localMotion =
             (localMotionFactor + onsetKick) *
@@ -1550,16 +1584,15 @@ export function SoundTextCanvas({
             fragment.rotation * localMotion * (1 - restorePull * 0.9) +
             (localSettle > 0 && !restoredActive
               ? Math.sin(time * 0.26 + fragment.phase) *
-                0.012 *
+                0.006 *
                 voiceDriftFade
               : 0)
           const scale =
-            fragment.scale * (1 + localMotion * (fragment.depth + 1) * 0.012)
+            fragment.scale * (1 + localMotion * (fragment.depth + 1) * 0.006)
           const opacity =
             fragment.opacity *
-            (1 - localSettle * 0.08) *
-            (0.88 + (fragment.depth + 1) * 0.06) *
-            (restoredActive ? 1 : 1 - restorationEnergy * 0.18)
+            (1 - localSettle * 0.035) *
+            (0.9 + (fragment.depth + 1) * 0.04)
           const sprite = restoredActive
             ? current.restorationSource === 'voice'
               ? ensureRestoredSprite(geometry, fragment, 'voice')
@@ -1584,6 +1617,26 @@ export function SoundTextCanvas({
             fragment.height,
           )
           context.restore()
+        }
+      }
+
+      const alignedCrackFade = 1 - separation * 0.8
+      if (showFragments && alignedCrackFade > 0.02) {
+        const crackAlphas = [
+          clamp(crackProgress / 0.12, 0, 1),
+          clamp((crackProgress - 0.32) / 0.3, 0, 1),
+          clamp((crackProgress - 0.62) / 0.38, 0, 1),
+        ]
+        for (let index = 0; index < crackLayers.length; index += 1) {
+          const alpha = crackAlphas[index] ?? 0
+          if (alpha <= 0 || crackVisibility <= 0.01) continue
+          context.globalAlpha =
+            alpha *
+            0.52 *
+            crackVisibility *
+            alignedCrackFade *
+            (0.94 + voice * 0.04 + onsetBoost * 0.08)
+          context.drawImage(crackLayers[index], 0, 0, width, height)
         }
       }
       context.globalAlpha = 1
@@ -1737,7 +1790,7 @@ export function SoundTextCanvas({
             </div>
             <p>
               {fractureMode === 'voice'
-                ? '音频进度：0% 完整 · 25% 裂纹 · 50% 断裂 · 75% 分离 · 100% 悬停'
+                ? '破碎进度：0% 完整 · 25% 裂纹 · 50% 断裂 · 75% 分离 · 100% 悬停'
                 : '0ms 完整字形 · 200ms 裂纹 · 400ms 分离 · 600ms 弹开 · 800ms 悬停'}
             </p>
           </div>
