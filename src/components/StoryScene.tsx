@@ -156,7 +156,6 @@ export function StoryScene({
   const [speaking, setSpeaking] = useState(false)
   const [speakingDuration, setSpeakingDuration] = useState(6800)
   const [speakingTick, setSpeakingTick] = useState(0)
-  const [departingTermId, setDepartingTermId] = useState<string | null>(null)
   const [followFeedback, setFollowFeedback] = useState<{
     kind: 'voice' | 'rhythm' | 'silent'
     text: string
@@ -169,7 +168,6 @@ export function StoryScene({
     playbackInfo?.termId === term.id ? playbackInfo.kind : null
   const termRef = useRef(term)
   const playedRef = useRef('')
-  const exitTimerRef = useRef<number | null>(null)
   const followPointerActiveRef = useRef(false)
   const playbackRequestRef = useRef(0)
   const meaningButtonRef = useRef<HTMLButtonElement>(null)
@@ -179,7 +177,6 @@ export function StoryScene({
   const isRestored = Boolean(restoredTermSource)
   const isExplained = explainedTermIds.includes(term.id)
   const isSkipped = skippedTermIds.includes(term.id)
-  const isDeparting = departingTermId === term.id
 
   const showFollowFeedback = useCallback(
     (outcome: FollowOutcome) => {
@@ -269,7 +266,6 @@ export function StoryScene({
 
   useEffect(() => {
     return () => {
-      if (exitTimerRef.current !== null) window.clearTimeout(exitTimerRef.current)
       if (feedbackTimerRef.current !== null) {
         window.clearTimeout(feedbackTimerRef.current)
       }
@@ -365,19 +361,6 @@ export function StoryScene({
       }
     })
   }, [onCloseMeaning])
-
-  const leaveWithChoice = () => {
-    onChoice({ scene: chapter.scene, type: 'skip', termId: term.id })
-    setDepartingTermId(term.id)
-    if (exitTimerRef.current !== null) window.clearTimeout(exitTimerRef.current)
-    exitTimerRef.current = window.setTimeout(
-      () => {
-        setDepartingTermId(null)
-        onAdvance()
-      },
-      reducedMotion ? 120 : 620,
-    )
-  }
 
   const beginFollow = () => {
     onFollowActiveChange(true)
@@ -545,7 +528,7 @@ export function StoryScene({
           restorationSource={activeRestorationSource}
           guideActive={wordGuideVisible && chapter.scene === 'call'}
           onTermClick={() => openMeaning('term')}
-          fragmentBias={isDeparting ? 0.55 : 0}
+          fragmentBias={0}
           chapter={chapter.scene}
           fractureMode="voice"
           getVoicePlayback={getVoicePlayback}
@@ -585,12 +568,10 @@ export function StoryScene({
             role="group"
             aria-labelledby="sentence-actions-label"
           >
-            <div className="action-dock__head">
+            <div className="action-dock__stay">
               <p id="sentence-actions-label" className="action-dock__label">
-                这一句可以
+                还想在这一句停一会儿
               </p>
-            </div>
-            <div className="action-row">
               <div className="action-row__secondary">
                 <button
                   type="button"
@@ -618,28 +599,16 @@ export function StoryScene({
                   看这句话的意思
                 </button>
               </div>
-              <button
-                type="button"
-                className="primary-button primary-button--small action-button--advance"
-                onClick={onAdvance}
-                disabled={isDeparting}
-              >
-                继续通话
-              </button>
             </div>
             <button
               type="button"
-              className="quiet-button action-button--skip"
-              onClick={leaveWithChoice}
-              disabled={isDeparting}
-              aria-label="跳过这一句，进入下一句"
+              className="primary-button action-button--advance"
+              onClick={onAdvance}
             >
-              跳过这一句
+              继续通话
+              <span className="action-button__arrow" aria-hidden="true">→</span>
             </button>
           </div>
-          <p className="sr-only" aria-live="polite">
-            {isDeparting ? '这一句正在留在身后。' : ''}
-          </p>
         </section>
 
         {isCooling && (
