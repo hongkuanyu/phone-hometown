@@ -1706,7 +1706,7 @@ export function SoundTextCanvas({
           aria-label={`查看“${text}”在生活里的意思`}
           onClick={onTermClick}
         >
-          <span aria-hidden="true">看这句话</span>
+          <span aria-hidden="true">看这句话的意思</span>
         </button>
       )}
       {import.meta.env.DEV && (

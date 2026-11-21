@@ -307,6 +307,7 @@ export function StoryScene({
     }
   }, [chapter.scene, isCooling, mic, onFollowActiveChange])
   const replay = () => {
+    onDismissWordGuide()
     onChoice({ scene: chapter.scene, type: 'replay', termId: term.id })
     setPulse((value) => value + 1)
     const requestId = ++playbackRequestRef.current
@@ -327,6 +328,7 @@ export function StoryScene({
   }
 
   const explain = () => {
+    onDismissWordGuide()
     onChoice({ scene: chapter.scene, type: 'explain', termId: term.id })
     setPulse((value) => value + 1)
     const requestId = ++playbackRequestRef.current
@@ -438,7 +440,7 @@ export function StoryScene({
       ? '麦克风未启用：按住跟读，会用节奏补回一笔。'
       : '按住跟读，你留下的声音会补回一笔。'
   const guideText = wordGuideVisible && chapter.scene === 'call'
-    ? '字会跟着声音碎开。点开一个词，看看它在生活里的意思。'
+    ? '字会跟着声音碎开。听不清时，可以再听一遍、听她解释，或看看这句话的意思。'
     : ''
   const activeRestorationSource = mic.isActive
     ? mic.status === 'fallback'
@@ -578,47 +580,61 @@ export function StoryScene({
             </p>
           )}
 
-          <div className="action-row">
-            <div className="action-row__secondary">
-              <button
-                type="button"
-                className="quiet-button action-button--strong"
-                onClick={replay}
-              >
-                再听一遍
-              </button>
-              <button
-                type="button"
-                className="quiet-button action-button--strong"
-                onClick={explain}
-              >
-                听听她怎么说
-              </button>
-              <button
-                ref={meaningButtonRef}
-                type="button"
-                className="quiet-button action-button--strong"
-                onClick={() => openMeaning('button')}
-              >
-                看这句话
-              </button>
+          <div
+            className={`action-dock ${wordGuideVisible && chapter.scene === 'call' ? 'is-intro' : ''}`}
+            role="group"
+            aria-labelledby="sentence-actions-label"
+          >
+            <div className="action-dock__head">
+              <p id="sentence-actions-label" className="action-dock__label">
+                这一句可以
+              </p>
             </div>
-            <div className="action-row__weak">
+            <div className="action-row">
+              <div className="action-row__secondary">
+                <button
+                  type="button"
+                  className="quiet-button action-button--strong action-button--tool"
+                  onClick={replay}
+                  aria-label="再听一遍这一句"
+                >
+                  再听一遍
+                </button>
+                <button
+                  type="button"
+                  className="quiet-button action-button--strong action-button--tool"
+                  onClick={explain}
+                  aria-label="听母亲解释这一句"
+                >
+                  听她解释
+                </button>
+                <button
+                  ref={meaningButtonRef}
+                  type="button"
+                  className="quiet-button action-button--strong action-button--tool"
+                  onClick={() => openMeaning('button')}
+                  aria-label="查看这句话在生活中的意思"
+                >
+                  看这句话的意思
+                </button>
+              </div>
               <button
                 type="button"
-                className="quiet-button action-button--weak"
-                onClick={leaveWithChoice}
+                className="primary-button primary-button--small action-button--advance"
+                onClick={onAdvance}
+                disabled={isDeparting}
               >
-                让这句话过去
+                继续通话
               </button>
             </div>
             <button
               type="button"
-              className="primary-button primary-button--small"
-              onClick={onAdvance}
+              className="quiet-button action-button--skip"
+              onClick={leaveWithChoice}
               disabled={isDeparting}
+              aria-label="跳过这一句，进入下一句"
             >
-              继续通话
+              跳过这一句
             </button>
           </div>
           <p className="sr-only" aria-live="polite">
