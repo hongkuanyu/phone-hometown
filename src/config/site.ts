@@ -18,9 +18,9 @@ export const siteConfig = {
   workType: '浏览器互动叙事',
   materials: '17 条家庭录音；环境声由 Web Audio 实时生成。',
   credits: {
-    author: '洪宽煜',
-    school: '无锡学院',
-    instructor: '王昊海',
-    copyright: '© 2026 洪宽煜',
+    author: null,
+    school: null,
+    instructor: null,
+    copyright: null,
   } satisfies SiteCredits,
 } as const

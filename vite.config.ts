@@ -11,7 +11,6 @@ function siteMetaPlugin() {
       return html
         .replaceAll('%SITE_TITLE%', siteConfig.title)
         .replaceAll('%SITE_DESCRIPTION%', siteConfig.description)
-        .replaceAll('%SITE_AUTHOR%', siteConfig.credits.author ?? '')
         .replaceAll('%SITE_URL%', siteConfig.siteUrl)
         .replaceAll('%SITE_IMAGE%', siteConfig.shareImageUrl)
         .replaceAll('%SITE_IMAGE_WIDTH%', String(siteConfig.shareImageWidth))
