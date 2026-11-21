@@ -1985,10 +1985,11 @@ button { cursor: pointer; }
 /* Short portrait screens scroll instead of clipping the experience. */
 @media (max-height: 520px) and (max-width: 430px) and (orientation: portrait) {
   .experience {
-    height: auto;
-    min-height: 100svh;
+    height: 100svh;
+    min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
+    overscroll-behavior-y: contain;
   }
 
   .intro-scene,
