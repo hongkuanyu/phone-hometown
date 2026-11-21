@@ -11,7 +11,7 @@ export const callTerms: StoryTerm[] = [
     scene: 'call',
     speaker: '母亲',
     beat: '来电',
-    display: '夜饭吃过了伐',
+    display: '囡囡，夜饭吃过了伐？',
     familyText: '囡囡，夜饭吃过了伐？',
     spokenText: '囡囡，夜饭吃过了伐？',
     pronunciation: '近似读音：nan nan，ya fan qih guo le va',

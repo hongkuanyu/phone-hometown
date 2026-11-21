@@ -25,7 +25,6 @@ interface StorySceneProps {
   subtitleVisible: boolean
   translationOpen: boolean
   restoredTermSource?: RestorationSource
-  wordGuideVisible: boolean
   followGuideVisible: boolean
   skippedTermIds: string[]
   explainedTermIds: string[]
@@ -35,7 +34,6 @@ interface StorySceneProps {
   voiceVolume: number
   getVoicePlayback: () => VoicePlaybackSnapshot
   onFollowActiveChange: (active: boolean) => void
-  onDismissWordGuide: () => void
   onDismissFollowGuide: () => void
   onToggleAudio: () => void
   onTogglePause: () => void
@@ -121,7 +119,6 @@ export function StoryScene({
   subtitleVisible,
   translationOpen,
   restoredTermSource,
-  wordGuideVisible,
   followGuideVisible,
   skippedTermIds,
   explainedTermIds,
@@ -131,7 +128,6 @@ export function StoryScene({
   voiceVolume,
   getVoicePlayback,
   onFollowActiveChange,
-  onDismissWordGuide,
   onDismissFollowGuide,
   onToggleAudio,
   onTogglePause,
@@ -164,8 +160,11 @@ export function StoryScene({
     termId: string
     kind: 'recording' | 'placeholder'
   } | null>(null)
+  const [helperReadyFor, setHelperReadyFor] = useState<string | null>(null)
+  const [helperOpenFor, setHelperOpenFor] = useState<string | null>(null)
   const playbackKind =
     playbackInfo?.termId === term.id ? playbackInfo.kind : null
+  const playbackReadyForTerm = playbackInfo?.termId === term.id
   const termRef = useRef(term)
   const playedRef = useRef('')
   const followPointerActiveRef = useRef(false)
@@ -174,6 +173,9 @@ export function StoryScene({
   const meaningOriginRef = useRef<'button' | 'term'>('button')
   const feedbackTimerRef = useRef<number | null>(null)
   const isCooling = chapter.scene === 'cooling'
+  const isCall = chapter.scene === 'call'
+  const helperReady = helperReadyFor === term.id
+  const helperOpen = helperOpenFor === term.id
   const isRestored = Boolean(restoredTermSource)
   const isExplained = explainedTermIds.includes(term.id)
   const isSkipped = skippedTermIds.includes(term.id)
@@ -234,6 +236,24 @@ export function StoryScene({
     const timer = window.setTimeout(() => setSpeaking(false), speakingDuration)
     return () => window.clearTimeout(timer)
   }, [speaking, speakingDuration, speakingTick])
+
+  useEffect(() => {
+    if (!isCall || speaking || audioPaused || audioMuted) return
+    if (!playbackReadyForTerm) return
+    const timer = window.setTimeout(
+      () => setHelperReadyFor(term.id),
+      termIndex === 0 ? 1400 : 900,
+    )
+    return () => window.clearTimeout(timer)
+  }, [
+    audioMuted,
+    audioPaused,
+    isCall,
+    playbackReadyForTerm,
+    speaking,
+    term.id,
+    termIndex,
+  ])
 
   useEffect(() => {
     termRef.current = term
@@ -303,7 +323,6 @@ export function StoryScene({
     }
   }, [chapter.scene, isCooling, mic, onFollowActiveChange])
   const replay = () => {
-    onDismissWordGuide()
     onChoice({ scene: chapter.scene, type: 'replay', termId: term.id })
     setPulse((value) => value + 1)
     const requestId = ++playbackRequestRef.current
@@ -324,7 +343,6 @@ export function StoryScene({
   }
 
   const explain = () => {
-    onDismissWordGuide()
     onChoice({ scene: chapter.scene, type: 'explain', termId: term.id })
     setPulse((value) => value + 1)
     const requestId = ++playbackRequestRef.current
@@ -347,7 +365,6 @@ export function StoryScene({
     meaningOriginRef.current = origin
     onChoice({ scene: chapter.scene, type: 'meaning', termId: term.id })
     onRestore(term.id, 'semantic')
-    onDismissWordGuide()
     onOpenMeaning()
   }
 
@@ -422,9 +439,6 @@ export function StoryScene({
     mic.permission === 'denied' || mic.permission === 'unsupported'
       ? '麦克风未启用：按住跟读，会用节奏补回一笔。'
       : '按住跟读，你留下的声音会补回一笔。'
-  const guideText = wordGuideVisible && chapter.scene === 'call'
-    ? '字会跟着声音碎开。听不清时，可以再听一遍、听她解释，或看看这句话的意思。'
-    : ''
   const activeRestorationSource = mic.isActive
     ? mic.status === 'fallback'
       ? 'rhythm'
@@ -470,7 +484,7 @@ export function StoryScene({
                 : '完整 · 裂纹 · 碎裂 · 悬停'
   return (
     <main
-      className={`story-scene story-scene--${chapter.scene}`}
+      className={`story-scene story-scene--${chapter.scene} ${isCall && termIndex === 0 ? 'story-scene--call-opening' : ''}`}
       style={{ '--voice-level': audioLevel } as React.CSSProperties}
     >
       <PhoneChrome
@@ -501,11 +515,6 @@ export function StoryScene({
             {textState}
           </span>
         </div>
-        <SceneGuide
-          visible={Boolean(guideText)}
-          text={guideText}
-          onDismiss={onDismissWordGuide}
-        />
 
         <SoundTextCanvas
           text={term.display}
@@ -526,7 +535,7 @@ export function StoryScene({
           speaking={speaking && !audioPaused && !audioMuted}
           restored={isRestored}
           restorationSource={activeRestorationSource}
-          guideActive={wordGuideVisible && chapter.scene === 'call'}
+          guideActive={false}
           onTermClick={() => openMeaning('term')}
           fragmentBias={0}
           chapter={chapter.scene}
@@ -540,15 +549,19 @@ export function StoryScene({
           <span />
         </div>
 
-        <p className="chapter-note" aria-live="polite">
-          {termIndex === 0 ? chapter.opening : chapter.chapterNote}
-        </p>
+        {!(isCall && termIndex === 0) && (
+          <p className="chapter-note" aria-live="polite">
+            {termIndex === 0 ? chapter.opening : chapter.chapterNote}
+          </p>
+        )}
       </section>
 
       <footer className="story-footer">
         <section className="cue-panel" aria-label="当前情境">
           <p className="cue-panel__beat">
-            {chapter.eyebrow} · {term.beat} · {termIndex + 1}/{chapter.terms.length}
+            {isCall
+              ? '来电'
+              : `${chapter.eyebrow} · ${term.beat} · ${termIndex + 1}/${chapter.terms.length}`}
           </p>
           {subtitleVisible && (
             <p className="subtitle-line">
@@ -564,42 +577,95 @@ export function StoryScene({
           )}
 
           <div
-            className={`action-dock ${wordGuideVisible && chapter.scene === 'call' ? 'is-intro' : ''}`}
+            className={`action-dock ${isCall ? 'action-dock--call' : ''}`}
             role="group"
-            aria-labelledby="sentence-actions-label"
+            aria-label={isCall ? '当前这句话的操作' : undefined}
+            aria-labelledby={isCall ? undefined : 'sentence-actions-label'}
           >
-            <div className="action-dock__stay">
-              <p id="sentence-actions-label" className="action-dock__label">
-                还想在这一句停一会儿
-              </p>
-              <div className="action-row__secondary">
-                <button
-                  type="button"
-                  className="quiet-button action-button--strong action-button--tool"
-                  onClick={replay}
-                  aria-label="再听一遍这一句"
-                >
-                  再听一遍
-                </button>
-                <button
-                  type="button"
-                  className="quiet-button action-button--strong action-button--tool"
-                  onClick={explain}
-                  aria-label="听母亲解释这一句"
-                >
-                  听她解释
-                </button>
-                <button
-                  ref={meaningButtonRef}
-                  type="button"
-                  className="quiet-button action-button--strong action-button--tool"
-                  onClick={() => openMeaning('button')}
-                  aria-label="查看这句话在生活中的意思"
-                >
-                  看这句话的意思
-                </button>
+            {isCall ? (
+              <div className="call-action-assist">
+                {helperReady && (
+                  <>
+                    <button
+                      type="button"
+                      className="call-action-prompt"
+                      onClick={() =>
+                        setHelperOpenFor(helperOpen ? null : term.id)
+                      }
+                      aria-expanded={helperOpen}
+                      aria-controls={`call-helper-${term.id}`}
+                    >
+                      没听清？
+                    </button>
+                    {helperOpen && (
+                      <div
+                        id={`call-helper-${term.id}`}
+                        className="call-action-tools"
+                      >
+                        <button
+                          type="button"
+                          className="quiet-button action-button--strong action-button--tool"
+                          onClick={replay}
+                          aria-label="再听一次这一句"
+                        >
+                          再听一次
+                        </button>
+                        <button
+                          type="button"
+                          className="quiet-button action-button--strong action-button--tool"
+                          onClick={explain}
+                          aria-label="没听清，再问母亲一句"
+                        >
+                          啊？
+                        </button>
+                        <button
+                          ref={meaningButtonRef}
+                          type="button"
+                          className="quiet-button action-button--strong action-button--tool"
+                          onClick={() => openMeaning('button')}
+                          aria-label="看看这句话是什么意思"
+                        >
+                          看看是什么意思
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="action-dock__stay">
+                <p id="sentence-actions-label" className="action-dock__label">
+                  还想在这一句停一会儿
+                </p>
+                <div className="action-row__secondary">
+                  <button
+                    type="button"
+                    className="quiet-button action-button--strong action-button--tool"
+                    onClick={replay}
+                    aria-label="再听一遍这一句"
+                  >
+                    再听一遍
+                  </button>
+                  <button
+                    type="button"
+                    className="quiet-button action-button--strong action-button--tool"
+                    onClick={explain}
+                    aria-label="听母亲解释这一句"
+                  >
+                    听她解释
+                  </button>
+                  <button
+                    ref={meaningButtonRef}
+                    type="button"
+                    className="quiet-button action-button--strong action-button--tool"
+                    onClick={() => openMeaning('button')}
+                    aria-label="查看这句话在生活中的意思"
+                  >
+                    看这句话的意思
+                  </button>
+                </div>
+              </div>
+            )}
             <button
               type="button"
               className="primary-button action-button--advance"

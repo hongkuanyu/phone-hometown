@@ -68,9 +68,7 @@ function App() {
     Record<string, RestorationSource>
   >({})
   const [rhythmTermIds, setRhythmTermIds] = useState<string[]>([])
-  const [wordGuideVisible, setWordGuideVisible] = useState(false)
   const [followGuideVisible, setFollowGuideVisible] = useState(false)
-  const wordGuideSeenRef = useRef(false)
   const followGuideSeenRef = useRef(false)
   const [skippedTermIds, setSkippedTermIds] = useState<string[]>([])
   const [explainedTermIds, setExplainedTermIds] = useState<string[]>([])
@@ -155,9 +153,7 @@ function App() {
     setChapterRun((value) => value + 1)
     setTranslationOpen(false)
     setRestoredTermSources({})
-    wordGuideSeenRef.current = true
     followGuideSeenRef.current = false
-    setWordGuideVisible(true)
     setFollowGuideVisible(false)
     clearDuckTimers()
   }, [audio, clearDuckTimers])
@@ -182,9 +178,7 @@ function App() {
     setRecordedFragments([])
     setChoices([])
     setAboutReturn(null)
-    setWordGuideVisible(false)
     setFollowGuideVisible(false)
-    wordGuideSeenRef.current = false
     followGuideSeenRef.current = false
     setAudioUnlocked(false)
     callTimer.reset()
@@ -215,9 +209,7 @@ function App() {
     setTermIndex(0)
     setTranslationOpen(false)
     setRestoredTermSources({})
-    wordGuideSeenRef.current = true
     followGuideSeenRef.current = false
-    setWordGuideVisible(true)
     setFollowGuideVisible(false)
   }, [audio, callTimer, clearDuckTimers, resetFragmentUrls])
 
@@ -288,7 +280,6 @@ function App() {
     [],
   )
 
-  const dismissWordGuide = useCallback(() => setWordGuideVisible(false), [])
   const dismissFollowGuide = useCallback(() => setFollowGuideVisible(false), [])
 
   const getVoicePlayback = useCallback(
@@ -357,7 +348,6 @@ function App() {
   )
 
   const openMeaning = useCallback(() => {
-    setWordGuideVisible(false)
     setTranslationOpen(true)
     duckFor('meaning', true)
   }, [duckFor])
@@ -560,13 +550,11 @@ function App() {
           termIndex={termIndex}
           translationOpen={translationOpen}
           restoredTermSource={restoredTermSources[chapter.terms[termIndex].id]}
-          wordGuideVisible={wordGuideVisible}
           followGuideVisible={followGuideVisible}
           skippedTermIds={skippedTermIds}
           explainedTermIds={explainedTermIds}
           getVoicePlayback={getVoicePlayback}
           onFollowActiveChange={setFollowListening}
-          onDismissWordGuide={dismissWordGuide}
           onDismissFollowGuide={dismissFollowGuide}
           onRestartChapter={restartChapter}
           onAdvance={advance}

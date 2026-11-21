@@ -13,43 +13,43 @@ interface IntroSceneProps {
 }
 
 const INTRO_TIMING = {
-  total: 6000,
-  lineDraw: 1150,
-  titleOneDelay: 850,
-  titleOneDuration: 2050,
-  lineWaveDelay: 1850,
-  lineWaveDuration: 2250,
-  titleTwoDelay: 1950,
-  titleTwoDuration: 2050,
-  subtitleDelay: 3750,
-  subtitleDuration: 1350,
-  actionDelay: 3850,
-  actionDuration: 1250,
-  supportDelay: 4750,
-  supportDuration: 1200,
-  aboutDelay: 4850,
-  aboutDuration: 1150,
-  assemblyDelay: 5000,
-  assemblyDuration: 1000,
+  total: 1600,
+  lineDraw: 700,
+  titleOneDelay: 120,
+  titleOneDuration: 950,
+  lineWaveDelay: 520,
+  lineWaveDuration: 850,
+  titleTwoDelay: 320,
+  titleTwoDuration: 950,
+  subtitleDelay: 820,
+  subtitleDuration: 650,
+  actionDelay: 420,
+  actionDuration: 500,
+  supportDelay: 980,
+  supportDuration: 500,
+  aboutDelay: 1000,
+  aboutDuration: 450,
+  assemblyDelay: 1050,
+  assemblyDuration: 350,
   reduced: {
-    total: 2000,
-    lineDraw: 800,
-    titleOneDelay: 100,
-    titleOneDuration: 900,
-    lineWaveDelay: 500,
-    lineWaveDuration: 800,
-    titleTwoDelay: 400,
-    titleTwoDuration: 900,
-    subtitleDelay: 850,
-    subtitleDuration: 600,
-    actionDelay: 900,
-    actionDuration: 600,
-    supportDelay: 1100,
-    supportDuration: 500,
-    aboutDelay: 1150,
-    aboutDuration: 700,
-    assemblyDelay: 1200,
-    assemblyDuration: 600,
+    total: 600,
+    lineDraw: 200,
+    titleOneDelay: 0,
+    titleOneDuration: 300,
+    lineWaveDelay: 100,
+    lineWaveDuration: 250,
+    titleTwoDelay: 80,
+    titleTwoDuration: 300,
+    subtitleDelay: 180,
+    subtitleDuration: 250,
+    actionDelay: 100,
+    actionDuration: 200,
+    supportDelay: 220,
+    supportDuration: 200,
+    aboutDelay: 230,
+    aboutDuration: 180,
+    assemblyDelay: 250,
+    assemblyDuration: 150,
   },
 } as const
 
@@ -66,57 +66,41 @@ export function IntroScene({
 }: IntroSceneProps) {
   const shouldPlay = animateIntro && canUseWebAnimations()
   const [isPlaying, setIsPlaying] = useState(shouldPlay)
-  const [listenReady, setListenReady] = useState(!shouldPlay)
-  const [secondaryReady, setSecondaryReady] = useState(!shouldPlay)
-  const [skipVisible, setSkipVisible] = useState(shouldPlay)
   const animationsRef = useRef<Animation[]>([])
   const pausedAnimationsRef = useRef(new Set<Animation>())
   const completedRef = useRef(!shouldPlay)
   const startLockRef = useRef(false)
-  const listenButtonRef = useRef<HTMLButtonElement>(null)
-  const skipButtonRef = useRef<HTMLButtonElement>(null)
   const pathRef = useRef<SVGPathElement>(null)
   const tracerRef = useRef<SVGPathElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const subtitleRef = useRef<HTMLParagraphElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
-  const notesRef = useRef<HTMLDListElement>(null)
+  const notesRef = useRef<HTMLParagraphElement>(null)
   const aboutRef = useRef<HTMLButtonElement>(null)
   const assemblyRef = useRef<HTMLSpanElement>(null)
 
-  const completeIntro = useCallback(
-    (focusListen: boolean) => {
-      if (completedRef.current) return
-      completedRef.current = true
-      const animations = animationsRef.current
-      animationsRef.current = []
-      pausedAnimationsRef.current.clear()
+  const completeIntro = useCallback(() => {
+    if (completedRef.current) return
+    completedRef.current = true
+    const animations = animationsRef.current
+    animationsRef.current = []
+    pausedAnimationsRef.current.clear()
 
-      animations.forEach((animation) => {
-        try {
-          animation.finish()
-        } catch {
-          animation.cancel()
-        }
-      })
+    animations.forEach((animation) => {
+      try {
+        animation.finish()
+      } catch {
+        animation.cancel()
+      }
+    })
 
-      const restoreFocus =
-        focusListen || document.activeElement === skipButtonRef.current
-      setIsPlaying(false)
-      setListenReady(true)
-      setSecondaryReady(true)
-      setSkipVisible(false)
-      onIntroComplete()
+    setIsPlaying(false)
+    onIntroComplete()
 
-      window.requestAnimationFrame(() => {
-        animations.forEach((animation) => animation.cancel())
-        if (restoreFocus) {
-          listenButtonRef.current?.focus({ preventScroll: true })
-        }
-      })
-    },
-    [onIntroComplete],
-  )
+    window.requestAnimationFrame(() => {
+      animations.forEach((animation) => animation.cancel())
+    })
+  }, [onIntroComplete])
 
   useEffect(() => {
     if (!isPlaying) return
@@ -138,7 +122,6 @@ export function IntroScene({
           ) ?? [],
         )
         const subtitle = subtitleRef.current
-        const actions = actionsRef.current
         const notes = notesRef.current
         const about = aboutRef.current
         const assembly = assemblyRef.current
@@ -148,12 +131,11 @@ export function IntroScene({
           !tracer ||
           titleLines.length < 2 ||
           !subtitle ||
-          !actions ||
           !notes ||
           !about ||
           !assembly
         ) {
-          completeIntro(false)
+          completeIntro()
           return
         }
 
@@ -272,31 +254,6 @@ export function IntroScene({
           },
         )
 
-        const actionAnimation = animate(
-          actions,
-          fullMotion
-            ? [
-                {
-                  opacity: 0,
-                  transform: 'translate3d(0, 6px, 0) scale(0.97)',
-                },
-                {
-                  opacity: 1,
-                  transform: 'translate3d(0, 0, 0) scale(1)',
-                },
-              ]
-            : [{ opacity: 0 }, { opacity: 1 }],
-          {
-            delay: motion.actionDelay,
-            duration: motion.actionDuration,
-            easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)',
-            fill: 'both',
-          },
-        )
-        actionAnimation.onfinish = () => {
-          if (!cancelled) setListenReady(true)
-        }
-
         animate(notes, [{ opacity: 0 }, { opacity: 1 }], {
           delay: motion.supportDelay,
           duration: motion.supportDuration,
@@ -320,7 +277,7 @@ export function IntroScene({
           },
         )
         aboutAnimation.onfinish = () => {
-          if (!cancelled) completeIntro(false)
+          if (!cancelled) completeIntro()
         }
 
         animationsRef.current = animations
@@ -341,7 +298,7 @@ export function IntroScene({
         document.addEventListener('visibilitychange', visibilityHandler)
         visibilityHandler()
       } catch {
-        completeIntro(false)
+        completeIntro()
       }
     })
 
@@ -358,15 +315,10 @@ export function IntroScene({
   }, [completeIntro, isPlaying, reducedMotion])
 
   const handleStart = () => {
-    if (!listenReady || startLockRef.current) return
+    if (startLockRef.current) return
     startLockRef.current = true
-    completeIntro(false)
+    completeIntro()
     onStart()
-  }
-
-  const handleSkip = () => {
-    if (completedRef.current) return
-    completeIntro(true)
   }
 
   const viewportWidth = window.innerWidth
@@ -405,17 +357,6 @@ export function IntroScene({
         reducedMotion={reducedMotion}
       />
 
-      {skipVisible && (
-        <button
-          ref={skipButtonRef}
-          type="button"
-          className="intro-skip"
-          onClick={handleSkip}
-        >
-          跳过片头
-        </button>
-      )}
-
       <div className="intro-thread" aria-hidden="true">
         <svg viewBox="0 0 640 70" preserveAspectRatio="none">
           <path
@@ -442,49 +383,34 @@ export function IntroScene({
           ))}
         </h1>
         <p ref={subtitleRef} className="intro-subtitle">
-          一个不会说常州话的年轻人，
-          <br />
-          试图听懂母亲电话里的声音。
+          {introCopy.subtitle}
         </p>
 
         <div ref={actionsRef} className="intro-actions">
           <button
-            ref={listenButtonRef}
             type="button"
             className="intro-listen-button"
             onClick={handleStart}
-            aria-disabled={!listenReady}
-            tabIndex={listenReady ? 0 : -1}
           >
             {introCopy.answer}
           </button>
         </div>
 
-        <dl ref={notesRef} className="intro-notes">
-          <div>
-            <dt>耳机</dt>
-            <dd>{introCopy.listening}</dd>
-          </div>
-          <div>
-            <dt>麦克风</dt>
-            <dd>{introCopy.privacy}</dd>
-          </div>
-        </dl>
+        <p ref={notesRef} className="intro-listening-note">
+          {introCopy.listening}
+        </p>
 
         <button
           ref={aboutRef}
           type="button"
           className="intro-about"
           onClick={onOpenAbout}
-          disabled={!secondaryReady}
         >
           {introCopy.about}
         </button>
       </section>
 
-      <span ref={assemblyRef} className="intro-assembly" aria-hidden="true">
-        声音会先抵达，意思可以迟到
-      </span>
+      <span ref={assemblyRef} className="intro-assembly" aria-hidden="true" />
     </main>
   )
 }
