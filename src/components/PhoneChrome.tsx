@@ -66,6 +66,24 @@ export function PhoneChrome({
       </div>
 
       <div className="utility-controls">
+        <button
+          type="button"
+          className="utility-button"
+          aria-pressed={!audioMuted}
+          aria-label={`声音，当前${audioMuted ? '关闭' : '开启'}`}
+          onClick={onToggleAudio}
+        >
+          声音
+        </button>
+        <button
+          type="button"
+          className="utility-button"
+          aria-pressed={subtitleVisible}
+          aria-label={`提示字幕，当前${subtitleVisible ? '开启' : '关闭'}`}
+          onClick={onToggleSubtitles}
+        >
+          提示
+        </button>
         <details
           ref={settingsRef}
           className="playback-settings experience-settings"
@@ -83,26 +101,10 @@ export function PhoneChrome({
               <button
                 type="button"
                 className="panel-button"
-                aria-pressed={!audioMuted}
-                onClick={onToggleAudio}
-              >
-                {audioMuted ? '开启声音' : '关闭声音'}
-              </button>
-              <button
-                type="button"
-                className="panel-button"
                 onClick={onTogglePause}
                 disabled={audioMuted}
               >
                 {audioPaused ? '继续声音' : '暂停声音'}
-              </button>
-              <button
-                type="button"
-                className="panel-button"
-                aria-pressed={subtitleVisible}
-                onClick={onToggleSubtitles}
-              >
-                提示字幕：{subtitleVisible ? '开' : '关'}
               </button>
               {showChapterRestart && onRestartChapter && (
                 <button

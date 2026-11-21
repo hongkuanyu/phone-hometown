@@ -9,6 +9,7 @@ interface PathSummary {
   explained: number
   inspected: number
   skipped: number
+  followed: number
   untouched: number
 }
 
@@ -80,6 +81,7 @@ export function AboutScene({
     pathSummary.explained > 0 ? `问了她 ${pathSummary.explained} 次“啊？”` : '',
     pathSummary.inspected > 0 ? `看过 ${pathSummary.inspected} 次意思` : '',
     pathSummary.skipped > 0 ? `让 ${pathSummary.skipped} 句话先过去` : '',
+    pathSummary.followed > 0 ? `有 ${pathSummary.followed} 次留下了声音` : '',
   ].filter(Boolean)
 
   return (

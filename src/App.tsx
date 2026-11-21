@@ -73,6 +73,9 @@ function App() {
   >({})
   const [rhythmTermIds, setRhythmTermIds] = useState<string[]>([])
   const [skippedTermIds, setSkippedTermIds] = useState<string[]>([])
+  const [inspectedTermIds, setInspectedTermIds] = useState<string[]>([])
+  const [callGuideVisible, setCallGuideVisible] = useState(false)
+  const [soundGuideVisible, setSoundGuideVisible] = useState(false)
   const [explainedTermIds, setExplainedTermIds] = useState<string[]>([])
   const [recordedFragments, setRecordedFragments] = useState<RecordedFragment[]>([])
   const [choices, setChoices] = useState<Choice[]>([])
@@ -151,6 +154,8 @@ function App() {
     setAudioUnlocked(true)
     setScene('call')
     setTransitionTarget('cooling')
+    setCallGuideVisible(true)
+    setSoundGuideVisible(false)
     setTermIndex(0)
     setChapterRun((value) => value + 1)
     setTranslationOpen(false)
@@ -175,6 +180,9 @@ function App() {
     setRhythmTermIds([])
     setSkippedTermIds([])
     setExplainedTermIds([])
+    setInspectedTermIds([])
+    setCallGuideVisible(false)
+    setSoundGuideVisible(false)
     setRecordedFragments([])
     setChoices([])
     setAboutReturn(null)
@@ -190,6 +198,9 @@ function App() {
     setRhythmTermIds([])
     setSkippedTermIds([])
     setExplainedTermIds([])
+    setInspectedTermIds([])
+    setCallGuideVisible(false)
+    setSoundGuideVisible(false)
     setRecordedFragments([])
     setChoices([])
     setMicPermission('unknown')
@@ -203,10 +214,14 @@ function App() {
     setAudioLevel(0)
     setAudioUnlocked(true)
     setScene('call')
+    setCallGuideVisible(true)
     setTermIndex(0)
     setTranslationOpen(false)
     setRestoredTermSources({})
   }, [audio, callTimer, clearDuckTimers, resetFragmentUrls])
+
+  const dismissCallGuide = useCallback(() => setCallGuideVisible(false), [])
+  const dismissSoundGuide = useCallback(() => setSoundGuideVisible(false), [])
 
   const openAbout = useCallback(() => {
     if (isStoryScene(scene)) setAboutReturn({ scene, termIndex })
@@ -214,6 +229,8 @@ function App() {
     audio.stopVoice()
     clearDuckTimers()
     setTranslationOpen(false)
+    setCallGuideVisible(false)
+    setSoundGuideVisible(false)
     setScene('about')
   }, [audio, clearDuckTimers, scene, termIndex])
 
@@ -250,6 +267,9 @@ function App() {
     }
     if (choice.type === 'explain') {
       setExplainedTermIds((previous) => addUnique(previous, choice.termId!))
+    }
+    if (choice.type === 'meaning') {
+      setInspectedTermIds((previous) => addUnique(previous, choice.termId!))
     }
   }, [])
 
@@ -387,6 +407,7 @@ function App() {
     )
     setSkippedTermIds((previous) => previous.filter((id) => !chapterTermIds.has(id)))
     setExplainedTermIds((previous) => previous.filter((id) => !chapterTermIds.has(id)))
+    setInspectedTermIds((previous) => previous.filter((id) => !chapterTermIds.has(id)))
     setChoices((previous) => previous.filter((choice) => choice.scene !== chapter.scene))
   }, [audio, chapter, clearDuckTimers])
 
@@ -475,6 +496,11 @@ function App() {
   }, [audio, resetFragmentUrls])
 
   const completeTransition = useCallback(() => {
+    if (transitionTarget === 'ending') {
+      setSoundGuideVisible(false)
+    } else {
+      setSoundGuideVisible(true)
+    }
     setScene(transitionTarget === 'ending' ? 'ending' : 'cooling')
     setTermIndex(0)
     setChapterRun((value) => value + 1)
@@ -495,9 +521,12 @@ function App() {
   const pathSummary = {
     replayed: choices.filter((choice) => choice.type === 'replay').length,
     explained: choices.filter((choice) => choice.type === 'explain').length,
-    inspected: choices.filter((choice) => choice.type === 'meaning').length,
+    inspected: inspectedTermIds.length,
     skipped: choices.filter(
       (choice) => choice.type === 'skip' || choice.type === 'pretend',
+    ).length,
+    followed: choices.filter(
+      (choice) => choice.type === 'follow' || choice.type === 'save',
     ).length,
     untouched: Math.max(0, allTerms.length - touchedTermIds.size),
   }
@@ -567,6 +596,10 @@ function App() {
           onSaveClip={saveClip}
           onMicPermission={setMicPermission}
           onChoice={choose}
+          callGuideVisible={callGuideVisible}
+          soundGuideVisible={soundGuideVisible}
+          onDismissCallGuide={dismissCallGuide}
+          onDismissSoundGuide={dismissSoundGuide}
         />
       )}
 

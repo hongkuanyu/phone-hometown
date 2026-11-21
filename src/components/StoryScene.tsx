@@ -26,6 +26,8 @@ interface StorySceneProps {
   translationOpen: boolean
   restoredTermSource?: RestorationSource
   skippedTermIds: string[]
+  callGuideVisible: boolean
+  soundGuideVisible: boolean
   explainedTermIds: string[]
   reducedMotion: boolean
   playbackRate: PlaybackRate
@@ -33,6 +35,8 @@ interface StorySceneProps {
   voiceVolume: number
   getVoicePlayback: () => VoicePlaybackSnapshot
   onFollowActiveChange: (active: boolean) => void
+  onDismissCallGuide: () => void
+  onDismissSoundGuide: () => void
   onToggleAudio: () => void
   onTogglePause: () => void
   onToggleSubtitles: () => void
@@ -56,6 +60,32 @@ interface StorySceneProps {
   onChoice: (choice: Choice) => void
 }
 
+function TimedGuide({
+  visible,
+  text,
+  onDismiss,
+}: {
+  visible: boolean
+  text: string
+  onDismiss: () => void
+}) {
+  useEffect(() => {
+    if (!visible) return
+    const timer = window.setTimeout(onDismiss, 8000)
+    return () => window.clearTimeout(timer)
+  }, [onDismiss, visible])
+
+  return (
+    <div
+      className={`scene-guide ${visible ? 'is-visible' : 'is-hidden'}`}
+      aria-live="polite"
+      aria-hidden={!visible}
+    >
+      <p>{visible ? text : '\u00a0'}</p>
+    </div>
+  )
+}
+
 export function StoryScene({
   chapter,
   termIndex,
@@ -67,6 +97,8 @@ export function StoryScene({
   translationOpen,
   restoredTermSource,
   skippedTermIds,
+  callGuideVisible,
+  soundGuideVisible,
   explainedTermIds,
   reducedMotion,
   playbackRate,
@@ -74,6 +106,8 @@ export function StoryScene({
   voiceVolume,
   getVoicePlayback,
   onFollowActiveChange,
+  onDismissCallGuide,
+  onDismissSoundGuide,
   onToggleAudio,
   onTogglePause,
   onToggleSubtitles,
@@ -108,6 +142,8 @@ export function StoryScene({
   const [helperReadyFor, setHelperReadyFor] = useState<string | null>(null)
   const [helperOpenFor, setHelperOpenFor] = useState<string | null>(null)
   const [coolingAssistReadyFor, setCoolingAssistReadyFor] = useState<string | null>(null)
+  const [finalContinueReadyFor, setFinalContinueReadyFor] = useState<string | null>(null)
+  const [departingTermId, setDepartingTermId] = useState<string | null>(null)
   const playbackKind =
     playbackInfo?.termId === term.id ? playbackInfo.kind : null
   const playbackReadyForTerm = playbackInfo?.termId === term.id
@@ -118,6 +154,7 @@ export function StoryScene({
   const meaningButtonRef = useRef<HTMLButtonElement>(null)
   const meaningOriginRef = useRef<'button' | 'term'>('button')
   const feedbackTimerRef = useRef<number | null>(null)
+  const exitTimerRef = useRef<number | null>(null)
   const isCooling = chapter.scene === 'cooling'
   const isCall = chapter.scene === 'call'
   const isFinalCooling = isCooling && termIndex === chapter.terms.length - 1
@@ -125,6 +162,8 @@ export function StoryScene({
   const helperOpen = helperOpenFor === term.id
   const coolingAssistReady =
     isCooling && !isFinalCooling && coolingAssistReadyFor === term.id
+  const finalContinueReady = isFinalCooling && finalContinueReadyFor === term.id
+  const isDeparting = departingTermId === term.id
   const isRestored = Boolean(restoredTermSource)
   const isExplained = explainedTermIds.includes(term.id)
   const isSkipped = skippedTermIds.includes(term.id)
@@ -133,6 +172,9 @@ export function StoryScene({
     (outcome: FollowOutcome) => {
       if (feedbackTimerRef.current !== null) {
         window.clearTimeout(feedbackTimerRef.current)
+      }
+      if (exitTimerRef.current !== null) {
+        window.clearTimeout(exitTimerRef.current)
       }
       const feedback =
         outcome.source === 'voice'
@@ -230,17 +272,17 @@ export function StoryScene({
     if (!isFinalCooling || speaking || audioPaused) return
     if (!playbackReadyForTerm) return
     const timer = window.setTimeout(
-      onAdvance,
-      reducedMotion ? 1600 : 4200,
+      () => setFinalContinueReadyFor(term.id),
+      reducedMotion ? 2400 : 6200,
     )
     return () => window.clearTimeout(timer)
   }, [
     audioPaused,
     isFinalCooling,
-    onAdvance,
     playbackReadyForTerm,
     reducedMotion,
     speaking,
+    term.id,
   ])
 
   useEffect(() => {
@@ -311,6 +353,8 @@ export function StoryScene({
     }
   }, [chapter.scene, isCooling, mic, onFollowActiveChange])
   const replay = () => {
+    onDismissCallGuide()
+    onDismissSoundGuide()
     onChoice({ scene: chapter.scene, type: 'replay', termId: term.id })
     setPulse((value) => value + 1)
     const requestId = ++playbackRequestRef.current
@@ -331,6 +375,8 @@ export function StoryScene({
   }
 
   const explain = () => {
+    onDismissCallGuide()
+    onDismissSoundGuide()
     onChoice({ scene: chapter.scene, type: 'explain', termId: term.id })
     setPulse((value) => value + 1)
     const requestId = ++playbackRequestRef.current
@@ -350,6 +396,8 @@ export function StoryScene({
   }
 
   const openMeaning = (origin: 'button' | 'term' = 'button') => {
+    onDismissCallGuide()
+    onDismissSoundGuide()
     meaningOriginRef.current = origin
     onChoice({ scene: chapter.scene, type: 'meaning', termId: term.id })
     onRestore(term.id, 'semantic')
@@ -368,8 +416,31 @@ export function StoryScene({
   }, [onCloseMeaning])
 
   const beginFollow = () => {
+    onDismissSoundGuide()
     onFollowActiveChange(true)
     void mic.startHold()
+  }
+
+  const leaveWithChoice = () => {
+    onDismissCallGuide()
+    onDismissSoundGuide()
+    onChoice({ scene: chapter.scene, type: 'skip', termId: term.id })
+    setDepartingTermId(term.id)
+    if (exitTimerRef.current !== null) window.clearTimeout(exitTimerRef.current)
+    exitTimerRef.current = window.setTimeout(
+      () => {
+        setDepartingTermId(null)
+        onAdvance()
+      },
+      reducedMotion ? 120 : 520,
+    )
+  }
+
+  const continueListening = () => {
+    if (isDeparting) return
+    onDismissCallGuide()
+    onDismissSoundGuide()
+    onAdvance()
   }
 
   const endFollow = () => {
@@ -445,6 +516,20 @@ export function StoryScene({
             : mic.permission === 'granted'
               ? '仅本页 · 也可以只是听'
               : '按住后才会请求麦克风')
+  const callGuideText =
+    '字会跟着声音碎开。没听清时，可以再听一次、再问一句，或看看是什么意思。'
+  const soundGuideText =
+    mic.permission === 'denied' || mic.permission === 'unsupported'
+      ? '没有打开麦克风也没关系，可以用节奏留下一笔。也可以只是听。'
+      : '如果愿意，可以按住留下你的声音。也可以只是听。'
+
+  const chapterNote =
+    termIndex === 0
+      ? chapter.opening
+      : termIndex === 1
+        ? chapter.chapterNote
+        : ''
+
   const textState = mic.isActive
     ? mic.status === 'fallback'
       ? '节奏正在留下一笔'
@@ -476,7 +561,7 @@ export function StoryScene({
       {(!isFinalCooling || audioPaused) && (
         <PhoneChrome
           timer={timer}
-          stage={isCall ? chapter.stage : ''}
+          stage={chapter.stage}
         audioMuted={audioMuted}
         audioPaused={audioPaused}
         subtitleVisible={subtitleVisible}
@@ -506,6 +591,14 @@ export function StoryScene({
           </div>
         )}
 
+        {isCall && termIndex === 0 && helperReady && callGuideVisible && (
+          <TimedGuide
+            visible
+            text={callGuideText}
+            onDismiss={onDismissCallGuide}
+          />
+        )}
+
         <SoundTextCanvas
           text={term.display}
           stateKey={term.id}
@@ -527,7 +620,7 @@ export function StoryScene({
           restorationSource={activeRestorationSource}
           guideActive={false}
           onTermClick={isFinalCooling ? undefined : () => openMeaning('term')}
-          fragmentBias={0}
+          fragmentBias={isDeparting ? 0.35 : 0}
           chapter={chapter.scene}
           fractureMode="voice"
           getVoicePlayback={getVoicePlayback}
@@ -541,19 +634,18 @@ export function StoryScene({
           </div>
         )}
 
-        {!isFinalCooling &&
-          ((!isCall && termIndex === 0) || (isCall && termIndex > 0)) && (
-            <p className="chapter-note" aria-live="polite">
-              {termIndex === 0 ? chapter.opening : chapter.chapterNote}
-            </p>
-          )}
+        {!isFinalCooling && chapterNote && (
+          <p className="chapter-note" aria-live="polite">
+            {chapterNote}
+          </p>
+        )}
       </section>
 
       {!isFinalCooling && (
         <footer className="story-footer">
           <section className="cue-panel" aria-label="当前情境">
             <p className="cue-panel__beat">
-              {isCall ? '来电' : term.beat}
+              {`${chapter.eyebrow} · ${term.beat} · ${termIndex + 1}/${chapter.terms.length}`}
             </p>
             {subtitleVisible && (
               <p className="subtitle-line">
@@ -561,7 +653,7 @@ export function StoryScene({
                 {term.mandarinHint}
               </p>
             )}
-            {subtitleVisible && isExplained && (
+            {isExplained && (
               <p className="explanation-trace" aria-live="polite">
                 <span>母亲又说</span>
                 {term.supplement}
@@ -579,14 +671,25 @@ export function StoryScene({
                     <button
                       type="button"
                       className="sentence-helper-prompt"
-                      onClick={() =>
+                      onClick={() => {
+                        onDismissCallGuide()
+                        onDismissSoundGuide()
                         setHelperOpenFor(helperOpen ? null : term.id)
-                      }
+                      }}
                       aria-expanded={helperOpen}
                       aria-controls={`sentence-helper-${term.id}`}
                     >
                       没听清？
                     </button>
+                    {!helperOpen && (
+                      <button
+                        type="button"
+                        className="sentence-quick-replay"
+                        onClick={replay}
+                      >
+                        再听一次
+                      </button>
+                    )}
                     {helperOpen && (
                       <div
                         id={`sentence-helper-${term.id}`}
@@ -622,14 +725,26 @@ export function StoryScene({
                   </>
                 )}
               </div>
-              <button
-                type="button"
-                className="primary-button action-button--advance"
-                onClick={onAdvance}
-              >
-                继续听
-                <span className="action-button__arrow" aria-hidden="true">→</span>
-              </button>
+              <div className="action-dock__forward">
+                <button
+                  type="button"
+                  className="primary-button action-button--advance"
+                  onClick={continueListening}
+                  disabled={isDeparting}
+                >
+                  继续听
+                  <span className="action-button__arrow" aria-hidden="true">→</span>
+                </button>
+                <button
+                  type="button"
+                  className="quiet-button action-button--skip"
+                  onClick={leaveWithChoice}
+                  disabled={isDeparting}
+                  aria-label="跳过这一句，进入下一句"
+                >
+                  让这一句过去
+                </button>
+              </div>
             </div>
           </section>
 
@@ -640,6 +755,13 @@ export function StoryScene({
               }`}
               aria-label="留下声音"
             >
+              {soundGuideVisible && (
+                <TimedGuide
+                  visible
+                  text={soundGuideText}
+                  onDismiss={onDismissSoundGuide}
+                />
+              )}
               <div className="follow-panel__intro">
                 <p className="follow-panel__title">按住，留下声音</p>
                 <p className="follow-panel__invitation">也可以只是听。</p>
@@ -674,6 +796,17 @@ export function StoryScene({
             </section>
           )}
         </footer>
+      )}
+
+      {isFinalCooling && finalContinueReady && (
+        <button
+          type="button"
+          className="final-memory-continue"
+          onClick={continueListening}
+        >
+          继续听
+          <span className="action-button__arrow" aria-hidden="true">→</span>
+        </button>
       )}
 
       {translationOpen && (

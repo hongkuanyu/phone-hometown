@@ -384,6 +384,7 @@ export function IntroScene({
         </h1>
         <p ref={subtitleRef} className="intro-subtitle">
           {introCopy.subtitle}
+          <span className="intro-identity">{introCopy.identity}</span>
         </p>
 
         <div ref={actionsRef} className="intro-actions">
