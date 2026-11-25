@@ -7,9 +7,9 @@ interface PrologueSceneProps {
 }
 
 const SENTENCE_TIMING = {
-  initialFadeOut: 1500,
-  step: 1900,
-  sentenceDuration: 2100,
+  initialFadeOut: 1150,
+  step: 1600,
+  sentenceDuration: 1750,
 } as const
 
 export function PrologueScene({ onBegin, onComplete }: PrologueSceneProps) {

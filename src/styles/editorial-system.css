@@ -223,7 +223,7 @@ button { cursor: pointer; }
 
 .intro-identity {
   width: min(430px, 50vw);
-  margin-top: 18px;
+  margin: 18px 0 0;
   color: var(--color-ink-faint);
   font-family: var(--font-sans);
   font-size: 11px;
@@ -335,6 +335,7 @@ button { cursor: pointer; }
 }
 
 .intro-about {
+  margin: 0;
   padding-left: 18px;
   border-right: 0;
   border-bottom: 0;
@@ -364,6 +365,19 @@ button { cursor: pointer; }
 .intro-archive-mark,
 .intro-content {
   z-index: 2;
+}
+
+.intro-thread::after {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 3px;
+  height: 3px;
+  content: "";
+  border-radius: 50%;
+  background: var(--color-mother-readable);
+  opacity: 0.72;
+  transform: translateY(-50%);
 }
 
 .intro-thread__path {
@@ -462,6 +476,57 @@ button { cursor: pointer; }
   border: 1px solid var(--color-line-weak);
   box-shadow: none;
   font-family: var(--font-sans);
+}
+
+.playback-panel__heading {
+  display: flex;
+  margin-bottom: 12px;
+  padding-bottom: 13px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--color-ink-faint);
+  border-bottom: 1px solid var(--color-line-weak);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.playback-panel__heading span:first-child {
+  color: var(--color-ink-soft);
+  font-size: 10px;
+}
+
+.panel-row {
+  display: flex;
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: var(--color-ink-soft);
+  border: 0;
+  border-bottom: 1px solid var(--color-line-weak);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-align: left;
+}
+
+.panel-row strong {
+  color: var(--color-ink-faint);
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.panel-row:hover,
+.panel-row:focus-visible {
+  color: var(--color-ink);
+}
+
+.panel-row--about {
+  margin-top: 14px;
 }
 
 .playback-panel__actions {
@@ -592,11 +657,22 @@ button { cursor: pointer; }
 
 .field-meta__speaker {
   color: var(--color-mother-readable);
+  letter-spacing: 0.090em;
 }
 
 .field-meta__count {
+  display: inline-flex;
+  align-items: center;
   color: var(--color-ink-faint);
   font-variant-numeric: tabular-nums;
+}
+
+.field-meta__count::before {
+  width: 30px;
+  height: 1px;
+  margin-right: 10px;
+  content: "";
+  background: var(--color-line-weak);
 }
 
 .field-meta__state {
@@ -650,26 +726,74 @@ button { cursor: pointer; }
 
 .narrative-coordinate {
   position: absolute;
-  top: 50%;
+  top: 47%;
   left: var(--gutter);
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 16px;
   color: var(--color-ink-faint);
-  font-size: 8px;
   line-height: 1.35;
-  letter-spacing: 0.08em;
-  transform: translate(-35%, -50%) rotate(-90deg);
-  transform-origin: center;
+  transform: translateY(-50%);
   pointer-events: none;
 }
 
+.narrative-coordinate::before {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 29px;
+  width: 1px;
+  content: "";
+  background: var(--color-line-weak);
+}
+
 .narrative-coordinate span {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px auto;
+  align-items: center;
+  gap: 9px;
   white-space: nowrap;
+}
+
+.narrative-coordinate span::after {
+  position: absolute;
+  top: 50%;
+  left: 27px;
+  width: 5px;
+  height: 5px;
+  content: "";
+  border-radius: 50%;
+  background: var(--color-line);
+  transform: translateY(-50%);
+}
+
+.narrative-coordinate i {
+  color: var(--color-ink-faint);
+  font-size: 7px;
+  font-style: normal;
+  letter-spacing: 0.08em;
+  text-align: right;
+}
+
+.narrative-coordinate b {
+  color: var(--color-ink-faint);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.07em;
 }
 
 .narrative-coordinate .is-current {
   color: var(--color-mother-readable);
+}
+
+.narrative-coordinate .is-current i,
+.narrative-coordinate .is-current b {
+  color: var(--color-mother-readable);
+}
+
+.narrative-coordinate .is-current::after {
+  background: var(--color-mother);
+  box-shadow: 0 0 0 3px rgba(168,68,50,.08);
 }
 
 .question-ripple {
@@ -1269,6 +1393,15 @@ button { cursor: pointer; }
   letter-spacing: 0.13em;
 }
 
+.about-kicker::after {
+  display: block;
+  margin-top: 8px;
+  color: rgba(36,35,31,.34);
+  content: "CHANGZHOU / FAMILY SOUND ARCHIVE";
+  font-size: 8px;
+  letter-spacing: 0.11em;
+}
+
 .about-header h1 {
   margin-top: 14px;
   color: var(--color-paper-ink);
@@ -1686,10 +1819,7 @@ button { cursor: pointer; }
   }
 
   .narrative-coordinate {
-    top: 54%;
-    left: 13px;
-    gap: 12px;
-    font-size: 8px;
+    display: none;
   }
 
   .chapter-note {
@@ -2312,10 +2442,7 @@ button { cursor: pointer; }
   }
 
   .narrative-coordinate {
-    top: 56%;
-    left: 10px;
-    gap: 8px;
-    font-size: 7px;
+    display: none;
   }
 
   .story-footer {

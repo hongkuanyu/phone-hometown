@@ -75,15 +75,6 @@ export function PhoneChrome({
         >
           声音
         </button>
-        <button
-          type="button"
-          className="utility-button"
-          aria-pressed={subtitleVisible}
-          aria-label={`提示字幕，当前${subtitleVisible ? '开启' : '关闭'}`}
-          onClick={onToggleSubtitles}
-        >
-          提示
-        </button>
         <details
           ref={settingsRef}
           className="playback-settings experience-settings"
@@ -92,11 +83,25 @@ export function PhoneChrome({
           <summary
             ref={settingsSummaryRef}
             className="utility-button playback-settings__summary"
-            aria-label={`设置与播放控制，当前声音${audioMuted ? '关闭' : '开启'}`}
+            aria-label={`声音与播放设置，当前声音${audioMuted ? '关闭' : '开启'}`}
           >
-            设置
+            <span aria-hidden="true">•••</span>
           </summary>
           <div className="playback-panel">
+            <div className="playback-panel__heading">
+              <span>声音控制台</span>
+              <span>SOUND / ARCHIVE</span>
+            </div>
+            <button
+              type="button"
+              className="panel-row"
+              aria-pressed={subtitleVisible}
+              aria-label={`普通话提示，当前${subtitleVisible ? '开启' : '关闭'}`}
+              onClick={onToggleSubtitles}
+            >
+              <span>普通话提示</span>
+              <strong>{subtitleVisible ? '开启' : '关闭'}</strong>
+            </button>
             <div className="playback-panel__actions">
               <button
                 type="button"
@@ -166,12 +171,16 @@ export function PhoneChrome({
                 }
               />
             </label>
+            <button
+              type="button"
+              className="panel-row panel-row--about"
+              onClick={onOpenAbout}
+            >
+              <span>作品与声音</span>
+              <span aria-hidden="true">↗</span>
+            </button>
           </div>
         </details>
-
-        <button type="button" className="utility-button" onClick={onOpenAbout}>
-          作品与声音
-        </button>
       </div>
     </header>
   )

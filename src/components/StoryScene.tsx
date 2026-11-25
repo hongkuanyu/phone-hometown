@@ -651,9 +651,15 @@ export function StoryScene({
           </div>
         )}
         <div className="narrative-coordinate" aria-hidden="true">
-          <span className={chapter.scene === 'call' ? 'is-current' : ''}>01 现在</span>
-          <span className={chapter.scene === 'stove' ? 'is-current' : ''}>02 记忆里</span>
-          <span className={chapter.scene === 'cooling' ? 'is-current' : ''}>03 再早一点</span>
+          <span className={chapter.scene === 'call' ? 'is-current' : ''}>
+            <i>01</i><b>现在</b>
+          </span>
+          <span className={chapter.scene === 'stove' ? 'is-current' : ''}>
+            <i>02</i><b>记忆里</b>
+          </span>
+          <span className={chapter.scene === 'cooling' ? 'is-current' : ''}>
+            <i>03</i><b>再早一点</b>
+          </span>
         </div>
 
         {isCall && termIndex === 0 && callGuideVisible && (
